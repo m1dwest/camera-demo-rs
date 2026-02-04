@@ -1,8 +1,4 @@
-// pub mod camera;
 pub mod devices_query;
-
-// pub use camera::Camera;
-pub use devices_query::Devices;
 
 use realsense_rust as rs;
 
@@ -14,7 +10,7 @@ use realsense_rust::{
 };
 
 pub struct Camera {
-    pub devices: Devices,
+    pub devices: devices_query::Devices,
 
     context: Context,
     // pipe: ActivePipeline,
@@ -24,7 +20,7 @@ impl Camera {
     pub fn new() -> Result<Self> {
         let context =
             rs::context::Context::new().context("RealSense context initialization failed")?;
-        let devices = Devices::query(&context);
+        let devices = devices_query::Devices::query(&context);
 
         let pipeline = rs::pipeline::InactivePipeline::try_from(&context)
             .context("Unable to create RealSense pipeline")?;
