@@ -1,0 +1,12 @@
+[package]
+name = "camera-demo-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = { version = "0.33.3", features = ["default"] }
+egui_extras = { version = "0.33.3", features = ["default", "image"] }
+log = "0.4.29"
+env_logger = { version = "0.11.8", features = ["auto-color", "humantime"] }
+realsense-rust = "1.3.0"
+anyhow = "1.0.100"
