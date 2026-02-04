@@ -5,13 +5,13 @@ use log::{debug, error, info};
 use realsense_rust as rs;
 
 use crate::core::Camera;
+use crate::ui::devices_combo_box::DevicesComboBox;
 use crate::ui::status_bar::Message;
 
 struct App {
     camera: Option<Camera>,
     status: Message,
-
-    camera_selected: usize,
+    devices_combo_box: DevicesComboBox,
 }
 
 impl App {
@@ -21,35 +21,46 @@ impl App {
             Err(e) => (None, Message::error(format!("{:#}", e))),
         };
 
+        let devices_combo_box = DevicesComboBox::new(
+            "Available devices",
+            if let Some(camera) = &camera {
+                camera.devices.get_names()
+            } else {
+                Vec::new()
+            },
+        );
+
+        if let Some(sn) = devices_combo_box.selected_sn() {
+            App::init_camera(sn);
+        }
+
         Self {
             camera,
             status,
-            // BUG: unstable id
-            camera_selected: 0,
+            devices_combo_box,
         }
+    }
+
+    fn init_camera(sn: String) {
+        //
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            egui::Frame::new().show(ui, |ui| {
-                let mut selected: usize = 0;
-                // egui::ComboBox::from_label("Available devices").show_ui(ui, |ui| {
-                //     let names = self.camera.devices.names();
-                //     for (i, name) in names.iter().enumerate() {
-                //         ui.selectable_value(&mut selected, i, *name);
-                //     }
-                // });
-            });
-            ui.heading("Camera view");
-        });
-
         self.status = Message::warn("Warning message");
-        crate::ui::status_bar::Show(ctx, &self.status);
 
         egui::SidePanel::left("control_panel").show(ctx, |ui| {
             ui.heading("Control panel");
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::Frame::new().show(ui, |ui| {
+                let action = self.devices_combo_box.show(ui);
+                if let crate::ui::devices_combo_box::Action::Changed { sn } = action {
+                    App::init_camera(sn);
+                }
+            });
         });
     }
 }

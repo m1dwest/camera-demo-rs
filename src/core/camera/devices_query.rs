@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use realsense_rust as rs;
 
 pub struct Devices {
-    // devices: Vec<rs::device::Device>,
     devices: std::collections::HashMap<String, rs::device::Device>,
 }
 
@@ -18,15 +17,22 @@ impl Devices {
             devices: devices
                 .into_iter()
                 .map_while(|d| {
-                    let name = d.info(rs::kind::Rs2CameraInfo::Name)?;
-                    let name = name.to_str().ok()?;
-                    Some((name.to_owned(), d))
+                    let sn = d.info(rs::kind::Rs2CameraInfo::SerialNumber)?;
+                    let sn = sn.to_str().ok()?;
+                    Some((sn.to_owned(), d))
                 })
                 .collect(),
         }
     }
 
-    pub fn names(&self) -> impl Iterator<Item = &String> {
-        self.devices.keys()
+    pub fn get_names(&self) -> Vec<(String, String)> {
+        self.devices
+            .iter()
+            .map_while(|(sn, d)| {
+                let name = d.info(rs::kind::Rs2CameraInfo::Name)?;
+                let name = name.to_str().ok()?;
+                Some((sn.clone(), name.to_owned()))
+            })
+            .collect()
     }
 }
