@@ -5,44 +5,32 @@ use log::{debug, error, info};
 use realsense_rust as rs;
 
 use crate::core::Camera;
+use crate::core::RealSenseBackend;
 use crate::ui::devices_combo_box::DevicesComboBox;
 use crate::ui::status_bar::Message;
 
 struct App {
-    camera: Option<Camera>,
+    backend: RealSenseBackend,
     status: Message,
     devices_combo_box: DevicesComboBox,
+    // fatal_error: Option<String>,
 }
 
 impl App {
-    fn new() -> Self {
-        let (camera, status) = match Camera::new() {
-            Ok(c) => (Some(c), Message::none()),
-            Err(e) => (None, Message::error(format!("{:#}", e))),
-        };
+    fn new() -> Result<Self> {
+        let backend = RealSenseBackend::new()?;
 
-        let devices_combo_box = DevicesComboBox::new(
-            "Available devices",
-            if let Some(camera) = &camera {
-                camera.devices.get_names()
-            } else {
-                Vec::new()
-            },
-        );
+        // TODO: NOne
+        let devices_combo_box = DevicesComboBox::new("Available devices", None);
 
-        if let Some(sn) = devices_combo_box.selected_sn() {
-            App::init_camera(sn);
-        }
+        let selected_sn = devices_combo_box.selected_sn();
+        let selected_mode = devices_combo_box.selected_mode();
 
-        Self {
-            camera,
-            status,
+        Ok(Self {
+            backend,
+            status: Message::none(),
             devices_combo_box,
-        }
-    }
-
-    fn init_camera(sn: String) {
-        //
+        })
     }
 }
 
@@ -58,7 +46,12 @@ impl eframe::App for App {
             egui::Frame::new().show(ui, |ui| {
                 let action = self.devices_combo_box.show(ui);
                 if let crate::ui::devices_combo_box::Action::Changed { sn } = action {
-                    App::init_camera(sn);
+                    // TODO: debug
+                    // self.camera = if sn.is_empty() {
+                    //     None
+                    // } else {
+                    //     Camera::new(&sn).ok()
+                    // };
                 }
             });
         });
