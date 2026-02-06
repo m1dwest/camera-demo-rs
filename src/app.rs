@@ -4,6 +4,7 @@ use eframe::egui;
 use log::{debug, error, info};
 use realsense_rust as rs;
 
+use crate::actions::Action;
 use crate::core::Camera;
 use crate::core::RealSenseBackend;
 use crate::ui::devices_combo_box::DevicesComboBox;
@@ -24,7 +25,6 @@ impl App {
             Err(e) => (None, Some(format!("{:#}", e))),
         };
 
-        // TODO: Refresh devices
         let devices = backend
             .as_ref()
             .map_or(Vec::new(), |backend| backend.devices());
@@ -40,35 +40,60 @@ impl App {
             fatal_error,
         }
     }
-}
 
-impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn show_ui(&mut self, ctx: &egui::Context) -> Vec<Action> {
+        let mut actions = Vec::new();
+
         if let Some(error) = &self.fatal_error {
             crate::ui::fatal_popup::show(ctx, error);
-            return;
+            return actions;
         }
 
-        self.status = Message::warn("Warning message");
         crate::ui::status_bar::show(ctx, &self.status);
+
+        egui::TopBottomPanel::top("device_select_panel").show(ctx, |ui| {
+            let combo_box_actions = self.devices_combo_box.show(ui);
+            actions.extend(combo_box_actions);
+        });
 
         egui::SidePanel::left("control_panel").show(ctx, |ui| {
             ui.heading("Control panel");
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::Frame::new().show(ui, |ui| {
-                let action = self.devices_combo_box.show(ui);
-                if let crate::ui::devices_combo_box::Action::Change { serial } = action {
-                    // TODO: debug
-                    // self.camera = if serial.is_empty() {
-                    //     None
-                    // } else {
-                    //     Camera::new(&serial).ok()
-                    // };
-                }
-            });
+            //
         });
+
+        actions
+    }
+
+    fn execute_actions(&mut self, actions: Vec<Action>) {
+        actions.iter().for_each(|action| match action {
+            Action::RefreshDeviceList => {
+                let devices = self
+                    .backend
+                    .as_ref()
+                    .expect("Program is running with empty backend")
+                    .devices();
+                self.devices_combo_box.refresh_device_list(devices);
+
+                info!("Action::RefreshDeviceList executed");
+            }
+            Action::DisableCamera => {
+                info!("Action::DisableCamera");
+            }
+            Action::ChangeCamera { serial } => {
+                info!("Action::ChangeCamera {}", serial);
+            }
+            Action::None => {}
+        });
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        let actions = self.show_ui(ctx);
+        self.execute_actions(actions);
     }
 }
 
