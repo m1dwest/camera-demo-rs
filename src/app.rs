@@ -45,12 +45,12 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if let Some(error) = &self.fatal_error {
-            crate::ui::fatal_popup::Show(ctx, error);
+            crate::ui::fatal_popup::show(ctx, error);
             return;
         }
 
         self.status = Message::warn("Warning message");
-        crate::ui::status_bar::Show(ctx, &self.status);
+        crate::ui::status_bar::show(ctx, &self.status);
 
         egui::SidePanel::left("control_panel").show(ctx, |ui| {
             ui.heading("Control panel");
@@ -59,12 +59,12 @@ impl eframe::App for App {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::Frame::new().show(ui, |ui| {
                 let action = self.devices_combo_box.show(ui);
-                if let crate::ui::devices_combo_box::Action::Changed { sn } = action {
+                if let crate::ui::devices_combo_box::Action::Change { serial } = action {
                     // TODO: debug
-                    // self.camera = if sn.is_empty() {
+                    // self.camera = if serial.is_empty() {
                     //     None
                     // } else {
-                    //     Camera::new(&sn).ok()
+                    //     Camera::new(&serial).ok()
                     // };
                 }
             });

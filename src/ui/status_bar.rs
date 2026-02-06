@@ -8,7 +8,7 @@ pub enum MessageType {
 }
 
 pub struct Message {
-    pub messageType: MessageType,
+    pub message_type: MessageType,
     pub text: String,
 
     color: egui::Color32,
@@ -18,16 +18,16 @@ pub struct Message {
 impl Message {
     pub fn none() -> Self {
         Self {
-            messageType: MessageType::None,
+            message_type: MessageType::None,
             text: String::new(),
             color: egui::Color32::from_rgb(40, 90, 200),
             icon: ' ',
         }
     }
 
-    pub fn info(message: impl Into<String>) -> Self {
+    pub fn _info(message: impl Into<String>) -> Self {
         Self {
-            messageType: MessageType::Info,
+            message_type: MessageType::Info,
             text: message.into(),
             color: egui::Color32::from_rgb(40, 90, 200),
             icon: '🛈',
@@ -36,16 +36,16 @@ impl Message {
 
     pub fn warn(message: impl Into<String>) -> Self {
         Self {
-            messageType: MessageType::Warn,
+            message_type: MessageType::Warn,
             text: message.into(),
             color: egui::Color32::from_rgb(230, 190, 40),
             icon: '⚠',
         }
     }
 
-    pub fn error(message: impl Into<String>) -> Self {
+    pub fn _error(message: impl Into<String>) -> Self {
         Self {
-            messageType: MessageType::Error,
+            message_type: MessageType::Error,
             text: message.into(),
             color: egui::Color32::from_rgb(200, 50, 50),
             icon: '⚠',
@@ -53,7 +53,7 @@ impl Message {
     }
 }
 
-pub fn Show(ctx: &egui::Context, message: &Message) -> egui::Response {
+pub fn show(ctx: &egui::Context, message: &Message) -> egui::Response {
     egui::TopBottomPanel::bottom("status_panel")
         .frame(
             egui::Frame::new()
