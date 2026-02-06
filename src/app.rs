@@ -10,33 +10,47 @@ use crate::ui::devices_combo_box::DevicesComboBox;
 use crate::ui::status_bar::Message;
 
 struct App {
-    backend: RealSenseBackend,
+    backend: Option<RealSenseBackend>,
     status: Message,
     devices_combo_box: DevicesComboBox,
-    // fatal_error: Option<String>,
+
+    fatal_error: Option<String>,
 }
 
 impl App {
-    fn new() -> Result<Self> {
-        let backend = RealSenseBackend::new()?;
+    fn new() -> Self {
+        let (backend, fatal_error) = match RealSenseBackend::new() {
+            Ok(value) => (Some(value), None),
+            Err(e) => (None, Some(format!("{:#}", e))),
+        };
 
-        // TODO: NOne
-        let devices_combo_box = DevicesComboBox::new("Available devices", None);
+        // TODO: Refresh devices
+        let devices = backend
+            .as_ref()
+            .map_or(Vec::new(), |backend| backend.devices());
+        let devices_combo_box = DevicesComboBox::new("Available devices", devices);
 
-        let selected_sn = devices_combo_box.selected_sn();
-        let selected_mode = devices_combo_box.selected_mode();
+        // let selected_sn = devices_combo_box.selected_sn();
+        // let selected_mode = devices_combo_box.selected_mode();
 
-        Ok(Self {
+        Self {
             backend,
             status: Message::none(),
             devices_combo_box,
-        })
+            fatal_error,
+        }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if let Some(error) = &self.fatal_error {
+            crate::ui::fatal_popup::Show(ctx, error);
+            return;
+        }
+
         self.status = Message::warn("Warning message");
+        crate::ui::status_bar::Show(ctx, &self.status);
 
         egui::SidePanel::left("control_panel").show(ctx, |ui| {
             ui.heading("Control panel");

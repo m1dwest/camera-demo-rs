@@ -7,54 +7,53 @@ pub enum Action {
 
 pub struct DevicesComboBox {
     label: String,
-    devices: Option<crate::core::Devices>,
-
-    selected: Option<String>,
-    items: Vec<(String, String)>,
+    devices: Vec<crate::core::Device>,
+    // selected: Option<String>,
 }
 
 impl DevicesComboBox {
-    pub fn new(label: &str, devices: Option<crate::core::Devices>) -> Self {
+    pub fn new(label: &str, devices: Vec<crate::core::Device>) -> Self {
         Self {
             label: label.to_owned(),
             devices,
-            selected: if !items.is_empty() {
-                items.first().map(|(sn, _)| sn.clone())
-            } else {
-                None
-            },
-            items,
+            // selected: if !items.is_empty() {
+            //     items.first().map(|(sn, _)| sn.clone())
+            // } else {
+            //     None
+            // },
+            // items,
         }
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui) -> Action {
         let mut action = Action::None;
 
-        let selected: &str = self
-            .selected
-            .as_deref()
-            .and_then(|selected_sn| {
-                self.items
-                    .iter()
-                    .find(|(sn, _)| sn == selected_sn)
-                    .map(|(_, name)| name.as_str())
-            })
-            .unwrap_or("");
+        // let selected: &str = self
+        //     .selected
+        //     .as_deref()
+        //     .and_then(|selected_sn| {
+        //         self.items
+        //             .iter()
+        //             .find(|(sn, _)| sn == selected_sn)
+        //             .map(|(_, name)| name.as_str())
+        //     })
+        //     .unwrap_or("");
 
         egui::ComboBox::from_label(self.label.clone())
-            .selected_text(selected)
+            // .selected_text(selected)
             .show_ui(ui, |ui| {
                 // TODO: debug
-                if ui.selectable_label(self.items.is_empty(), "None").clicked() {
-                    self.selected = Some("None".to_owned());
-                    action = Action::Changed { sn: "".to_owned() }
-                }
+                // if ui.selectable_label(self.items.is_empty(), "None").clicked() {
+                //     self.selected = Some("None".to_owned());
+                //     action = Action::Changed { sn: "".to_owned() }
+                // }
 
-                self.items.iter().for_each(|(sn, name)| {
-                    let is_selected = self.selected.as_deref() == Some(sn.as_str());
-                    if ui.selectable_label(is_selected, name).clicked() {
-                        self.selected = Some(sn.clone());
-                        action = Action::Changed { sn: sn.clone() };
+                self.devices.iter().for_each(|device| {
+                    // let is_selected = self.selected.as_deref() == Some(sn.as_str());
+                    let name = device.name.as_deref().unwrap_or("Unknown name");
+                    if ui.selectable_label(false, name).clicked() {
+                        // self.selected = Some(sn.clone());
+                        // action = Action::Changed { sn: sn.clone() };
                     }
                 });
             });
@@ -62,11 +61,11 @@ impl DevicesComboBox {
         action
     }
 
-    pub fn selected_sn(&self) -> Option<String> {
-        self.selected.clone()
-    }
-
-    pub fn selected_mode(&self) -> Option<crate::core::devices::Mode> {
-        None
-    }
+    // pub fn selected_sn(&self) -> Option<String> {
+    //     self.selected.clone()
+    // }
+    //
+    // pub fn selected_mode(&self) -> Option<crate::core::devices::Mode> {
+    //     None
+    // }
 }
