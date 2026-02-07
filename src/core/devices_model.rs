@@ -29,39 +29,42 @@ impl DevicesModel {
         }
     }
 
-    pub fn update(&self, devices: &[Device]) -> Self {
+    pub fn update(&mut self, devices: &[Device]) {
+        let current_serial = self.current_item().and_then(|item| item.serial.as_deref());
+
         let items: Vec<_> = devices.iter().map(DevicesModelItem::from_device).collect();
-
-        let selected_serial = if !self.items.is_empty() {
-            self.items[self.selected_index].serial.as_ref()
-        } else {
-            None
-        };
-
         let selected_index = items
             .iter()
-            .position(|item| item.serial.as_ref() == selected_serial)
+            .position(|item| item.serial.as_deref() == current_serial && current_serial.is_some())
             .unwrap_or(0);
 
-        Self {
-            items,
-            selected_index,
-        }
+        self.items = items;
+        self.selected_index = selected_index;
     }
 
-    pub fn current_item(&self) -> &DevicesModelItem {
-        &self.items[self.selected_index]
+    pub fn current_item(&self) -> Option<&DevicesModelItem> {
+        if self.items.is_empty() {
+            None
+        } else {
+            Some(&self.items[self.selected_index])
+        }
     }
 
     pub fn current_index(&self) -> usize {
         self.selected_index
     }
 
-    pub fn set_current_index(&mut self, index: usize) -> anyhow::Result<()> {
-        if index >= self.items.len() {
-            anyhow::bail!("Index out of range");
+    pub fn set_selection(&mut self, serial: &str) -> bool {
+        let index = self
+            .items
+            .iter()
+            .position(|item| item.serial.as_deref() == Some(serial));
+
+        if let Some(i) = index {
+            self.selected_index = i;
+            true
+        } else {
+            false
         }
-        self.selected_index = index;
-        Ok(())
     }
 }

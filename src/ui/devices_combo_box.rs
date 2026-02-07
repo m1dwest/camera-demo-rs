@@ -57,7 +57,10 @@ impl DevicesComboBox {
     fn show_combo_box(&mut self, ui: &mut egui::Ui, model: &DevicesModel) -> Vec<Action> {
         let mut actions = Vec::new();
 
-        let selected_text = decorated_name(model.current_item());
+        let selected_text = model
+            .current_item()
+            .map(decorated_name)
+            .unwrap_or("".to_owned());
 
         egui::ComboBox::from_label(self.label.clone())
             .selected_text(selected_text)
@@ -75,7 +78,8 @@ impl DevicesComboBox {
                     };
 
                     let is_already_selected =
-                        model.current_item().serial.as_deref() == Some(serial);
+                        model.current_item().and_then(|item| item.serial.as_deref())
+                            == Some(serial);
                     if is_already_selected {
                         return;
                     }

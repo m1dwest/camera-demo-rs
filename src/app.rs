@@ -31,7 +31,9 @@ impl App {
         let devices = backend
             .as_ref()
             .map_or(Vec::new(), |backend| backend.devices());
-        let devices_model = DevicesModel::new().update(&devices);
+        let mut devices_model = DevicesModel::new();
+        devices_model.update(&devices);
+
         let devices_combo_box = DevicesComboBox::new("Available devices");
 
         Self {
@@ -88,7 +90,7 @@ impl App {
             }
             Action::ChangeCamera { serial } => {
                 info!("Action::ChangeCamera {}", serial);
-                // set_current_index
+                self.devices_model.set_selection(serial);
             }
             Action::None => {}
         });
