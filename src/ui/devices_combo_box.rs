@@ -1,53 +1,35 @@
 use eframe::egui;
 
 use crate::actions::Action;
+use crate::core::devices_model::{DevicesModel, DevicesModelItem};
 
 pub struct DevicesComboBox {
     label: String,
-    devices: Vec<crate::core::Device>,
-    selected_serial: String,
 }
 
-const NONE_LABEL: &str = "None";
+pub struct Item {
+    name: String,
+    serial: String,
+}
+
 const HEIGHT: f32 = 40.0;
 
-fn get_selected_serial(devices: &[crate::core::Device], current: Option<&str>) -> String {
-    if let Some(serial) = current
-        && serial == NONE_LABEL
-    {
-        return NONE_LABEL.to_owned();
+fn decorated_name(item: &DevicesModelItem) -> String {
+    if item.serial.is_some() {
+        item.name.to_owned()
+    } else {
+        format!("Invalid: {}", item.name)
     }
-
-    if let Some(serial) = devices
-        .iter()
-        .find(|d| d.serial.as_deref() == current)
-        .and_then(|d| d.serial.clone())
-    {
-        return serial;
-    }
-
-    devices
-        .first()
-        .and_then(|d| d.serial.clone())
-        .unwrap_or(NONE_LABEL.to_owned())
 }
 
 impl DevicesComboBox {
-    pub fn new(label: &str, devices: Vec<crate::core::Device>) -> Self {
-        let selected_serial = get_selected_serial(&devices, None);
-
+    pub fn new(label: &str) -> Self {
         Self {
             label: label.to_owned(),
-            devices,
-            selected_serial,
         }
     }
 
-    pub fn refresh_device_list(&mut self, devices: Vec<crate::core::Device>) {
-        self.selected_serial = get_selected_serial(&devices, Some(self.selected_serial.as_str()));
-    }
-
-    pub fn show(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
+    pub fn show(&mut self, ui: &mut egui::Ui, model: &DevicesModel) -> Vec<Action> {
         let mut actions = Vec::new();
 
         ui.allocate_ui_with_layout(
@@ -62,7 +44,7 @@ impl DevicesComboBox {
                                 actions.push(Action::RefreshDeviceList);
                             }
 
-                            let combo_actions = self.show_combo_box(ui);
+                            let combo_actions = self.show_combo_box(ui, model);
                             actions.extend(combo_actions);
                         });
                     });
@@ -72,52 +54,38 @@ impl DevicesComboBox {
         actions
     }
 
-    fn show_combo_box(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
+    fn show_combo_box(&mut self, ui: &mut egui::Ui, model: &DevicesModel) -> Vec<Action> {
         let mut actions = Vec::new();
 
-        let selected = self
-            .name_from_serial(&self.selected_serial)
-            .unwrap_or(NONE_LABEL);
+        let selected_text = decorated_name(model.current_item());
 
         egui::ComboBox::from_label(self.label.clone())
-            .selected_text(selected)
+            .selected_text(selected_text)
             .show_ui(ui, |ui| {
-                if ui
-                    .selectable_label(self.selected_serial == NONE_LABEL, NONE_LABEL)
-                    .clicked()
-                {
-                    self.selected_serial = NONE_LABEL.to_owned();
-                    actions.push(Action::DisableCamera);
-                }
+                model.items.iter().enumerate().for_each(|(i, item)| {
+                    let is_selected = i == model.current_index();
+                    let name = decorated_name(item);
 
-                self.devices.iter().for_each(|device| {
-                    let (is_selected, name) = if let Some(serial) = &device.serial {
-                        (
-                            self.selected_serial.as_str() == serial.as_str(),
-                            device.name.as_deref().unwrap_or("Unknown name"),
-                        )
-                    } else {
-                        (false, "Invalid device")
+                    if !ui.selectable_label(is_selected, name).clicked() {
+                        return;
+                    }
+
+                    let Some(serial) = item.serial.as_deref() else {
+                        return;
                     };
 
-                    if ui.selectable_label(is_selected, name).clicked()
-                        && let Some(serial) = &device.serial
-                    {
-                        self.selected_serial = serial.clone();
-                        actions.push(Action::ChangeCamera {
-                            serial: serial.clone(),
-                        });
+                    let is_already_selected =
+                        model.current_item().serial.as_deref() == Some(serial);
+                    if is_already_selected {
+                        return;
                     }
+
+                    actions.push(Action::ChangeCamera {
+                        serial: serial.to_owned(),
+                    });
                 });
             });
 
         actions
-    }
-
-    fn name_from_serial(&self, serial: &str) -> Option<&str> {
-        self.devices
-            .iter()
-            .find(|d| d.serial.as_deref() == Some(serial))
-            .and_then(|d| d.name.as_deref())
     }
 }

@@ -6,13 +6,16 @@ use realsense_rust as rs;
 
 use crate::actions::Action;
 use crate::core::Camera;
-use crate::core::RealSenseBackend;
+use crate::core::{Device, DevicesModel, DevicesModelItem, RealSenseBackend};
 use crate::ui::devices_combo_box::DevicesComboBox;
 use crate::ui::status_bar::Message;
 
 struct App {
     backend: Option<RealSenseBackend>,
     status: Message,
+
+    devices: Vec<Device>,
+    devices_model: DevicesModel,
     devices_combo_box: DevicesComboBox,
 
     fatal_error: Option<String>,
@@ -28,14 +31,15 @@ impl App {
         let devices = backend
             .as_ref()
             .map_or(Vec::new(), |backend| backend.devices());
-        let devices_combo_box = DevicesComboBox::new("Available devices", devices);
-
-        // let selected_sn = devices_combo_box.selected_sn();
-        // let selected_mode = devices_combo_box.selected_mode();
+        let devices_model = DevicesModel::new().update(&devices);
+        let devices_combo_box = DevicesComboBox::new("Available devices");
 
         Self {
             backend,
             status: Message::none(),
+
+            devices,
+            devices_model,
             devices_combo_box,
             fatal_error,
         }
@@ -52,7 +56,7 @@ impl App {
         crate::ui::status_bar::show(ctx, &self.status);
 
         egui::TopBottomPanel::top("device_select_panel").show(ctx, |ui| {
-            let combo_box_actions = self.devices_combo_box.show(ui);
+            let combo_box_actions = self.devices_combo_box.show(ui, &self.devices_model);
             actions.extend(combo_box_actions);
         });
 
@@ -70,12 +74,12 @@ impl App {
     fn execute_actions(&mut self, actions: Vec<Action>) {
         actions.iter().for_each(|action| match action {
             Action::RefreshDeviceList => {
-                let devices = self
+                self.devices = self
                     .backend
                     .as_ref()
                     .expect("Program is running with empty backend")
                     .devices();
-                self.devices_combo_box.refresh_device_list(devices);
+                self.devices_model.update(&self.devices);
 
                 info!("Action::RefreshDeviceList executed");
             }
@@ -84,6 +88,7 @@ impl App {
             }
             Action::ChangeCamera { serial } => {
                 info!("Action::ChangeCamera {}", serial);
+                // set_current_index
             }
             Action::None => {}
         });
