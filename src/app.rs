@@ -6,17 +6,18 @@ use realsense_rust as rs;
 
 use crate::actions::Action;
 use crate::core::Camera;
-use crate::core::{Device, DevicesModel, DevicesModelItem, RealSenseBackend};
-use crate::ui::devices_combo_box::DevicesComboBox;
+use crate::core::{Device, DevicesModel, RealSenseBackend};
+use crate::ui::{device_mode_panel::DeviceModePanel, devices_combo_box::DevicesComboBox};
+
 use crate::ui::status_bar::Message;
 
 struct App {
     backend: Option<RealSenseBackend>,
     status: Message,
 
-    devices: Vec<Device>,
     devices_model: DevicesModel,
     devices_combo_box: DevicesComboBox,
+    device_mode_panel: DeviceModePanel,
 
     fatal_error: Option<String>,
 }
@@ -31,8 +32,7 @@ impl App {
         let devices = backend
             .as_ref()
             .map_or(Vec::new(), |backend| backend.devices());
-        let mut devices_model = DevicesModel::new();
-        devices_model.update(&devices);
+        let devices_model = DevicesModel::from_devices(devices, None);
         // for d in &devices {
         //     for (name, modes) in &d.sensor_modes {
         //         for mode in modes {
@@ -55,9 +55,9 @@ impl App {
             backend,
             status: Message::none(),
 
-            devices,
             devices_model,
             devices_combo_box,
+            device_mode_panel: DeviceModePanel::new(),
             fatal_error,
         }
     }
@@ -82,6 +82,7 @@ impl App {
             .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::same(8)))
             .show(ctx, |ui| {
                 ui.heading("Control panel");
+                // self.device_mode_panel.show(ui, &self.devices_model);
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -94,12 +95,15 @@ impl App {
     fn execute_actions(&mut self, actions: Vec<Action>) {
         actions.iter().for_each(|action| match action {
             Action::RefreshDeviceList => {
-                self.devices = self
+                let devices = self
                     .backend
                     .as_ref()
                     .expect("Program is running with empty backend")
                     .devices();
-                self.devices_model.update(&self.devices);
+                self.devices_model = DevicesModel::from_devices(
+                    devices,
+                    Some(std::mem::take(&mut self.devices_model)),
+                );
 
                 info!("Action::RefreshDeviceList executed");
             }
@@ -108,7 +112,8 @@ impl App {
             }
             Action::ChangeCamera { serial } => {
                 info!("Action::ChangeCamera {}", serial);
-                self.devices_model.set_selection(serial);
+                // TODO: check result
+                self.devices_model.select_device(serial);
             }
             Action::None => {}
         });

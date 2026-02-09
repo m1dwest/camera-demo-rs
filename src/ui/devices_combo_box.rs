@@ -1,7 +1,8 @@
 use eframe::egui;
 
 use crate::actions::Action;
-use crate::core::devices_model::{DevicesModel, DevicesModelItem};
+use crate::core::Device;
+use crate::core::devices_model::DevicesModel;
 
 pub struct DevicesComboBox {
     label: String,
@@ -14,12 +15,12 @@ pub struct Item {
 
 const HEIGHT: f32 = 40.0;
 
-fn decorated_name(item: &DevicesModelItem) -> String {
-    if item.serial.is_some() {
-        item.name.to_owned()
-    } else {
-        format!("Invalid: {}", item.name)
-    }
+fn decorated_name(device: &Device) -> String {
+    device
+        .serial
+        .is_some()
+        .then_some(device.name.clone())
+        .unwrap_or(format!("Invalid: {}", device.name))
 }
 
 impl DevicesComboBox {
@@ -58,31 +59,35 @@ impl DevicesComboBox {
         let mut actions = Vec::new();
 
         let selected_text = model
-            .current_item()
+            .selected_device()
             .map(decorated_name)
-            .unwrap_or("".to_owned());
+            .unwrap_or_default();
 
         egui::ComboBox::from_label(self.label.clone())
             .selected_text(selected_text)
             .show_ui(ui, |ui| {
-                model.items.iter().enumerate().for_each(|(i, item)| {
-                    let is_selected = i == model.current_index();
-                    let name = decorated_name(item);
+                model.devices.iter().for_each(|device| {
+                    let name = decorated_name(device);
 
-                    if !ui.selectable_label(is_selected, name).clicked() {
-                        return;
-                    }
-
-                    let Some(serial) = item.serial.as_deref() else {
-                        return;
+                    let is_device_selected = match (
+                        model.selected_device().and_then(|d| d.serial.as_ref()),
+                        &device.serial,
+                    ) {
+                        (Some(a), Some(b)) => a == b,
+                        _ => false,
                     };
 
-                    let is_already_selected =
-                        model.current_item().and_then(|item| item.serial.as_deref())
-                            == Some(serial);
-                    if is_already_selected {
+                    if !ui.selectable_label(is_device_selected, name).clicked() {
                         return;
                     }
+
+                    if is_device_selected {
+                        return;
+                    }
+
+                    let Some(serial) = device.serial.as_deref() else {
+                        return;
+                    };
 
                     actions.push(Action::ChangeCamera {
                         serial: serial.to_owned(),

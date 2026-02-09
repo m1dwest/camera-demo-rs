@@ -57,35 +57,48 @@ impl Capabilities {
 
         Capabilities(groups.into_iter().collect())
     }
+
+    pub fn get_kinds(&self) -> Vec<Rs2StreamKind> {
+        self.0.iter().map(|(k, _)| *k).collect()
+    }
+
+    pub fn get_modes_for(&self, kind: Rs2StreamKind) -> Option<&Vec<Mode>> {
+        self.0
+            .iter()
+            .find_map(|(k, m)| if *k == kind { Some(m) } else { None })
+    }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Mode {
     pub format: Rs2Format,
     pub framerate: i32,
-    pub resolution: Option<(usize, usize)>,
+    pub width: Option<usize>,
+    pub height: Option<usize>,
 }
 
 impl Mode {
     fn from_profile(profile: &rs::stream_profile::StreamProfile) -> Mode {
+        let (width, height) = match profile.intrinsics() {
+            Ok(i) => (Some(i.width()), Some(i.height())),
+            Err(_) => (None, None),
+        };
+
         return Self {
             format: profile.format(),
             framerate: profile.framerate(),
-            resolution: {
-                match profile.intrinsics() {
-                    Ok(i) => Some((i.width(), i.height())),
-                    Err(_) => None,
-                }
-            },
+            width,
+            height,
         };
     }
 }
 
 pub struct Device {
-    pub name: Option<String>,
+    pub name: String,
     pub serial: Option<String>,
 
     pub usb_type: Option<f32>,
-    pub capabilities: Vec<(Option<String>, Capabilities)>,
+    pub capabilities: Vec<(String, Capabilities)>,
 }
 
 pub struct RealSenseBackend {
@@ -93,6 +106,8 @@ pub struct RealSenseBackend {
 }
 
 impl RealSenseBackend {
+    const UNKNOWN_NAME: &str = "Unknown";
+
     pub fn new() -> Result<Self> {
         let ctx = rs::context::Context::new().context("Failed to create RealSense context")?;
         Ok(Self { ctx })
@@ -108,11 +123,12 @@ impl RealSenseBackend {
 
         let devices = self.ctx.query_devices(query);
 
-        devices
+        let mut result: Vec<_> = devices
             .into_iter()
             .map(|device| {
                 let name =
-                    parse_info::<String, _>(&device, Rs2CameraInfo::Name, "Rs2CameraInfo::Name");
+                    parse_info::<String, _>(&device, Rs2CameraInfo::Name, "Rs2CameraInfo::Name")
+                        .unwrap_or(Self::UNKNOWN_NAME.to_owned());
 
                 let serial = parse_info::<String, _>(
                     &device,
@@ -134,7 +150,8 @@ impl RealSenseBackend {
                             sensor,
                             Rs2CameraInfo::Name,
                             "Rs2CameraInfo::Name",
-                        );
+                        )
+                        .unwrap_or(Self::UNKNOWN_NAME.to_owned());
                         let cap = Capabilities::from_sensor(sensor);
 
                         (name, cap)
@@ -148,6 +165,22 @@ impl RealSenseBackend {
                     capabilities,
                 }
             })
-            .collect()
+            .collect();
+
+        result.push(Device {
+            name: "Some device name".to_owned(),
+            serial: None,
+            usb_type: None,
+            capabilities: Vec::new(),
+        });
+
+        result.push(Device {
+            name: "Some valid dev".to_owned(),
+            serial: Some("ssserial".to_owned()),
+            usb_type: None,
+            capabilities: Vec::new(),
+        });
+
+        result
     }
 }
