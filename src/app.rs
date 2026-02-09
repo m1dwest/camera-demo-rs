@@ -33,6 +33,21 @@ impl App {
             .map_or(Vec::new(), |backend| backend.devices());
         let mut devices_model = DevicesModel::new();
         devices_model.update(&devices);
+        // for d in &devices {
+        //     for (name, modes) in &d.sensor_modes {
+        //         for mode in modes {
+        //             log::info!(
+        //                 "name: {}, kind {}, format {}, framerate {}, resolution {} {}",
+        //                 name.clone().unwrap_or("noname".to_owned()),
+        //                 mode.kind,
+        //                 mode.format as i32,
+        //                 mode.framerate,
+        //                 mode.resolution.unwrap_or((9999, 9999)).0,
+        //                 mode.resolution.unwrap_or((9999, 9999)).1,
+        //             );
+        //         }
+        //     }
+        // }
 
         let devices_combo_box = DevicesComboBox::new("Available devices");
 
@@ -62,9 +77,12 @@ impl App {
             actions.extend(combo_box_actions);
         });
 
-        egui::SidePanel::left("control_panel").show(ctx, |ui| {
-            ui.heading("Control panel");
-        });
+        egui::SidePanel::left("control_panel")
+            .exact_width(300.0)
+            .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::same(8)))
+            .show(ctx, |ui| {
+                ui.heading("Control panel");
+            });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             //

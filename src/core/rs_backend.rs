@@ -41,17 +41,33 @@ where
         .ok()
 }
 
+pub struct Capabilities(Vec<(Rs2StreamKind, Vec<Mode>)>);
+
+impl Capabilities {
+    fn from_sensor(sensor: &rs::sensor::Sensor) -> Capabilities {
+        use std::collections::HashMap;
+
+        let mut groups: HashMap<Rs2StreamKind, Vec<Mode>> = HashMap::new();
+
+        for p in &sensor.stream_profiles() {
+            let kind = p.kind();
+            let cap = Mode::from_profile(p);
+            groups.entry(kind).or_default().push(cap);
+        }
+
+        Capabilities(groups.into_iter().collect())
+    }
+}
+
 pub struct Mode {
-    kind: Rs2StreamKind,
-    format: Rs2Format,
-    framerate: i32,
-    resolution: Option<(usize, usize)>,
+    pub format: Rs2Format,
+    pub framerate: i32,
+    pub resolution: Option<(usize, usize)>,
 }
 
 impl Mode {
-    fn from_profile(profile: &rs::stream_profile::StreamProfile) -> Self {
-        Self {
-            kind: profile.kind(),
+    fn from_profile(profile: &rs::stream_profile::StreamProfile) -> Mode {
+        return Self {
             format: profile.format(),
             framerate: profile.framerate(),
             resolution: {
@@ -60,7 +76,7 @@ impl Mode {
                     Err(_) => None,
                 }
             },
-        }
+        };
     }
 }
 
@@ -69,7 +85,7 @@ pub struct Device {
     pub serial: Option<String>,
 
     pub usb_type: Option<f32>,
-    pub sensor_modes: Vec<(Option<String>, Vec<Mode>)>,
+    pub capabilities: Vec<(Option<String>, Capabilities)>,
 }
 
 pub struct RealSenseBackend {
@@ -110,7 +126,7 @@ impl RealSenseBackend {
                     "Rs2CameraInfo::UsbTypeDescriptor",
                 );
 
-                let sensor_modes = device
+                let capabilities = device
                     .sensors()
                     .iter()
                     .map(|sensor| {
@@ -119,14 +135,9 @@ impl RealSenseBackend {
                             Rs2CameraInfo::Name,
                             "Rs2CameraInfo::Name",
                         );
+                        let cap = Capabilities::from_sensor(sensor);
 
-                        let modes = sensor
-                            .stream_profiles()
-                            .iter()
-                            .map(|profile| Mode::from_profile(profile))
-                            .collect();
-
-                        (name, modes)
+                        (name, cap)
                     })
                     .collect();
 
@@ -134,7 +145,7 @@ impl RealSenseBackend {
                     name,
                     serial,
                     usb_type,
-                    sensor_modes,
+                    capabilities,
                 }
             })
             .collect()
