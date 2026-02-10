@@ -3,4 +3,5 @@ pub enum Action {
     ChangeCamera { serial: String },
     DisableCamera,
     RefreshDeviceList,
+    SelectSensor { sensor: String },
 }

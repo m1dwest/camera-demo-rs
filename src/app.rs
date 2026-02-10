@@ -82,7 +82,8 @@ impl App {
             .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::same(8)))
             .show(ctx, |ui| {
                 ui.heading("Control panel");
-                // self.device_mode_panel.show(ui, &self.devices_model);
+                let device_mode_actions = self.device_mode_panel.show(ui, &self.devices_model);
+                actions.extend(device_mode_actions);
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -93,7 +94,7 @@ impl App {
     }
 
     fn execute_actions(&mut self, actions: Vec<Action>) {
-        actions.iter().for_each(|action| match action {
+        actions.into_iter().for_each(|action| match action {
             Action::RefreshDeviceList => {
                 let devices = self
                     .backend
@@ -114,6 +115,10 @@ impl App {
                 info!("Action::ChangeCamera {}", serial);
                 // TODO: check result
                 self.devices_model.select_device(serial);
+            }
+            Action::SelectSensor { sensor } => {
+                info!("Action::SelectSensor {}", sensor);
+                self.devices_model.select_sensor(sensor);
             }
             Action::None => {}
         });

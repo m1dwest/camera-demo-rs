@@ -31,17 +31,25 @@ impl DevicesModel {
             }
         }
 
-        let selected_serial = devices.iter().find_map(|d| d.serial.clone());
+        let selected_device = devices.iter().find(|d| d.serial.is_some());
+        let selected_serial = selected_device.and_then(|d| d.serial.clone());
+        let sensors = selected_device
+            .map(|d| {
+                let s: Vec<_> = d.capabilities.iter().map(|c| c.0.clone()).collect();
+                s
+            })
+            .unwrap_or_default();
 
         Self {
             devices,
+            sensors,
             selected_serial,
             ..Self::default()
         }
     }
 
-    pub fn select_device(&mut self, serial: &str) -> anyhow::Result<()> {
-        let is_same_device = self.selected_serial.as_deref() == Some(serial);
+    pub fn select_device(&mut self, serial: String) -> anyhow::Result<()> {
+        let is_same_device = self.selected_serial.as_deref() == Some(serial.as_str());
         if is_same_device {
             return Ok(());
         }
@@ -49,7 +57,7 @@ impl DevicesModel {
         let device = self
             .devices
             .iter()
-            .find(|d| d.serial.as_deref() == Some(serial));
+            .find(|d| d.serial.as_deref() == Some(serial.as_str()));
 
         if let Some(device) = device {
             self.selected_serial = Some(serial.to_owned());
@@ -71,8 +79,8 @@ impl DevicesModel {
             .find(|d| d.serial == self.selected_serial)
     }
 
-    pub fn select_sensor(&mut self, sensor: &str) -> anyhow::Result<()> {
-        let is_same_sensor = self.selected_sensor.as_deref() == Some(sensor);
+    pub fn select_sensor(&mut self, sensor: String) -> anyhow::Result<()> {
+        let is_same_sensor = self.selected_sensor.as_deref() == Some(sensor.as_str());
         if is_same_sensor {
             return Ok(());
         }
@@ -104,8 +112,12 @@ impl DevicesModel {
         }
     }
 
-    pub fn selected_sensor(&self) -> &Option<String> {
-        &self.selected_sensor
+    pub fn selected_sensor(&self) -> Option<&str> {
+        self.selected_sensor.as_deref()
+    }
+
+    pub fn sensors(&self) -> &Vec<String> {
+        &self.sensors
     }
 
     pub fn select_kind(&mut self, kind: Rs2StreamKind) -> anyhow::Result<()> {
@@ -145,6 +157,10 @@ impl DevicesModel {
         }
     }
 
+    pub fn kinds(&self) -> &Vec<Rs2StreamKind> {
+        &self.kinds
+    }
+
     pub fn select_mode(&mut self, mode: Mode) -> anyhow::Result<()> {
         if self.selected_device().is_none() {
             anyhow::bail!("Logic error. Unable to select stream kind without active device");
@@ -164,5 +180,9 @@ impl DevicesModel {
         } else {
             anyhow::bail!("No mode {:#?} available", mode);
         }
+    }
+
+    pub fn modes(&self) -> &Vec<Mode> {
+        &self.modes
     }
 }
