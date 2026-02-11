@@ -120,6 +120,10 @@ impl App {
                 info!("Action::SelectSensor {}", sensor);
                 self.devices_model.select_sensor(sensor);
             }
+            Action::SelectStream { stream } => {
+                info!("Action::SelectStream {}", stream.to_string());
+                self.devices_model.select_stream(stream);
+            }
             Action::None => {}
         });
     }

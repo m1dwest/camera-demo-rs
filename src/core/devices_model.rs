@@ -11,8 +11,8 @@ pub struct DevicesModel {
     sensors: Vec<String>,
     selected_sensor: Option<String>,
 
-    kinds: Vec<Rs2StreamKind>,
-    selected_kind: Option<Rs2StreamKind>,
+    streams: Vec<Rs2StreamKind>,
+    selected_stream: Option<Rs2StreamKind>,
 
     modes: Vec<Mode>,
     selected_mode: Option<Mode>,
@@ -63,8 +63,8 @@ impl DevicesModel {
             self.selected_serial = Some(serial.to_owned());
             self.sensors = device.capabilities.iter().map(|c| c.0.clone()).collect();
             self.selected_sensor = None;
-            self.kinds.clear();
-            self.selected_kind = None;
+            self.streams.clear();
+            self.selected_stream = None;
             self.modes.clear();
             self.selected_mode = None;
             Ok(())
@@ -89,21 +89,18 @@ impl DevicesModel {
             anyhow::bail!("Logic error. Unable to select sensor without active device");
         };
 
-        let kinds = selected_device
-            .capabilities
-            .iter()
-            .find_map(|(sensor, cap)| {
-                if sensor.as_str() == sensor {
-                    Some(cap.get_kinds())
-                } else {
-                    None
-                }
-            });
+        let streams = selected_device.capabilities.iter().find_map(|(s, cap)| {
+            if s.as_str() == sensor {
+                Some(cap.get_streams())
+            } else {
+                None
+            }
+        });
 
-        if let Some(kinds) = kinds {
+        if let Some(streams) = streams {
             self.selected_sensor = Some(sensor.to_owned());
-            self.kinds = kinds;
-            self.selected_kind = None;
+            self.streams = streams;
+            self.selected_stream = None;
             self.modes.clear();
             self.selected_mode = None;
             Ok(())
@@ -120,18 +117,18 @@ impl DevicesModel {
         &self.sensors
     }
 
-    pub fn select_kind(&mut self, kind: Rs2StreamKind) -> anyhow::Result<()> {
-        let is_same_kind = self.selected_kind == Some(kind);
-        if is_same_kind {
+    pub fn select_stream(&mut self, stream: Rs2StreamKind) -> anyhow::Result<()> {
+        let is_same_stream = self.selected_stream == Some(stream);
+        if is_same_stream {
             return Ok(());
         }
 
         let Some(selected_device) = self.selected_device() else {
-            anyhow::bail!("Logic error. Unable to select stream kind without active device");
+            anyhow::bail!("Logic error. Unable to select stream without active device");
         };
 
         if self.sensors.is_empty() {
-            anyhow::bail!("Logic error. Unable to select stream kind without active sensor");
+            anyhow::bail!("Logic error. Unable to select stream without active sensor");
         }
 
         let cap = selected_device
@@ -145,33 +142,40 @@ impl DevicesModel {
                 }
             });
 
-        let modes = cap.iter().find_map(|cap| cap.get_modes_for(kind)).cloned();
+        let modes = cap
+            .iter()
+            .find_map(|cap| cap.get_modes_for(stream))
+            .cloned();
 
         if let Some(modes) = modes {
-            self.selected_kind = Some(kind);
+            self.selected_stream = Some(stream);
             self.modes = modes;
             self.selected_mode = None;
             Ok(())
         } else {
-            anyhow::bail!("No kind {} available", kind);
+            anyhow::bail!("No stream {} available", stream);
         }
     }
 
-    pub fn kinds(&self) -> &Vec<Rs2StreamKind> {
-        &self.kinds
+    pub fn selected_stream(&self) -> Option<Rs2StreamKind> {
+        self.selected_stream
+    }
+
+    pub fn streams(&self) -> &Vec<Rs2StreamKind> {
+        &self.streams
     }
 
     pub fn select_mode(&mut self, mode: Mode) -> anyhow::Result<()> {
         if self.selected_device().is_none() {
-            anyhow::bail!("Logic error. Unable to select stream kind without active device");
+            anyhow::bail!("Logic error. Unable to select mode without active device");
         };
 
         if self.sensors.is_empty() {
-            anyhow::bail!("Logic error. Unable to select stream kind without active sensor");
+            anyhow::bail!("Logic error. Unable to select mode without active sensor");
         }
 
-        if self.kinds.is_empty() {
-            anyhow::bail!("Logic error. Unable to select stream kind without active kind");
+        if self.streams.is_empty() {
+            anyhow::bail!("Logic error. Unable to select mode without active stream");
         }
 
         if self.modes.iter().any(|m| m == &mode) {

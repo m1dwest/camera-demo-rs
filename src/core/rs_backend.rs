@@ -50,22 +50,22 @@ impl Capabilities {
         let mut groups: HashMap<Rs2StreamKind, Vec<Mode>> = HashMap::new();
 
         for p in &sensor.stream_profiles() {
-            let kind = p.kind();
+            let stream = p.kind();
             let cap = Mode::from_profile(p);
-            groups.entry(kind).or_default().push(cap);
+            groups.entry(stream).or_default().push(cap);
         }
 
         Capabilities(groups.into_iter().collect())
     }
 
-    pub fn get_kinds(&self) -> Vec<Rs2StreamKind> {
+    pub fn get_streams(&self) -> Vec<Rs2StreamKind> {
         self.0.iter().map(|(k, _)| *k).collect()
     }
 
-    pub fn get_modes_for(&self, kind: Rs2StreamKind) -> Option<&Vec<Mode>> {
+    pub fn get_modes_for(&self, stream: Rs2StreamKind) -> Option<&Vec<Mode>> {
         self.0
             .iter()
-            .find_map(|(k, m)| if *k == kind { Some(m) } else { None })
+            .find_map(|(k, m)| if *k == stream { Some(m) } else { None })
     }
 }
 
