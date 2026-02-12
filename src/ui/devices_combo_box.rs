@@ -42,7 +42,7 @@ impl DevicesComboBox {
                     .show(ui, |ui| {
                         ui.horizontal_centered(|ui| {
                             if ui.button("↻").clicked() {
-                                actions.push(Action::RefreshDeviceList);
+                                actions.push(Action::RefreshDevices);
                             }
 
                             let combo_actions = self.show_combo_box(ui, model);

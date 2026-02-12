@@ -186,6 +186,10 @@ impl DevicesModel {
         }
     }
 
+    pub fn selected_mode(&self) -> Option<Mode> {
+        self.selected_mode
+    }
+
     pub fn modes(&self) -> &Vec<Mode> {
         &self.modes
     }

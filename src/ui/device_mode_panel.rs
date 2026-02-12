@@ -53,7 +53,29 @@ impl DeviceModePanel {
                         actions.push(Action::SelectStream { stream });
                     }
                 }
-                //
+            });
+
+        let res_text = model
+            .selected_mode()
+            .map(|mode| mode.to_string())
+            .unwrap_or("Select resolution".to_owned());
+
+        egui::ComboBox::from_label("Resolution")
+            .selected_text(res_text)
+            .show_ui(ui, |ui| {
+                let selected_mode = model.selected_mode();
+
+                for mode in model.modes() {
+                    let is_selected = selected_mode.as_ref().is_some_and(|m| m == mode);
+                    let is_valid = mode.width.is_some() && mode.height.is_some();
+                    if !is_valid {
+                        continue;
+                    }
+
+                    if ui.selectable_label(is_selected, mode.to_string()).clicked() {
+                        actions.push(Action::SelectMode { mode: *mode });
+                    }
+                }
             });
 
         actions

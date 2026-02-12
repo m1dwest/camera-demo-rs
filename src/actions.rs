@@ -3,8 +3,10 @@ use realsense_rust::kind::Rs2StreamKind;
 pub enum Action {
     None,
     ChangeCamera { serial: String },
-    DisableCamera,
-    RefreshDeviceList,
+    StartCamera,
+    StopCamera,
+    RefreshDevices,
     SelectSensor { sensor: String },
     SelectStream { stream: Rs2StreamKind },
+    SelectMode { mode: crate::core::Mode },
 }

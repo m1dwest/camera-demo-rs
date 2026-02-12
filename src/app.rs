@@ -33,21 +33,6 @@ impl App {
             .as_ref()
             .map_or(Vec::new(), |backend| backend.devices());
         let devices_model = DevicesModel::from_devices(devices, None);
-        // for d in &devices {
-        //     for (name, modes) in &d.sensor_modes {
-        //         for mode in modes {
-        //             log::info!(
-        //                 "name: {}, kind {}, format {}, framerate {}, resolution {} {}",
-        //                 name.clone().unwrap_or("noname".to_owned()),
-        //                 mode.kind,
-        //                 mode.format as i32,
-        //                 mode.framerate,
-        //                 mode.resolution.unwrap_or((9999, 9999)).0,
-        //                 mode.resolution.unwrap_or((9999, 9999)).1,
-        //             );
-        //         }
-        //     }
-        // }
 
         let devices_combo_box = DevicesComboBox::new("Available devices");
 
@@ -94,38 +79,79 @@ impl App {
     }
 
     fn execute_actions(&mut self, actions: Vec<Action>) {
-        actions.into_iter().for_each(|action| match action {
-            Action::RefreshDeviceList => {
-                let devices = self
-                    .backend
-                    .as_ref()
-                    .expect("Program is running with empty backend")
-                    .devices();
-                self.devices_model = DevicesModel::from_devices(
-                    devices,
-                    Some(std::mem::take(&mut self.devices_model)),
-                );
+        if actions.is_empty() {
+            return;
+        }
 
-                info!("Action::RefreshDeviceList executed");
+        self.status = Message::none();
+
+        actions.into_iter().for_each(|action| match action {
+            Action::RefreshDevices => {
+                info!("Action::RefreshDevices executed");
+                self.refresh_devices();
             }
-            Action::DisableCamera => {
-                info!("Action::DisableCamera");
+            Action::StartCamera => {
+                info!("Action::StartCamera");
+            }
+            Action::StopCamera => {
+                info!("Action::StopCamera");
             }
             Action::ChangeCamera { serial } => {
                 info!("Action::ChangeCamera {}", serial);
-                // TODO: check result
-                self.devices_model.select_device(serial);
+                self.change_camera(serial);
             }
             Action::SelectSensor { sensor } => {
                 info!("Action::SelectSensor {}", sensor);
-                self.devices_model.select_sensor(sensor);
+                self.select_sensor(sensor);
             }
             Action::SelectStream { stream } => {
-                info!("Action::SelectStream {}", stream.to_string());
-                self.devices_model.select_stream(stream);
+                info!("Action::SelectStream {}", stream);
+                self.select_stream(stream);
+            }
+            Action::SelectMode { mode } => {
+                info!("Action::SelectMode {}", mode);
+                self.select_mode(mode);
             }
             Action::None => {}
         });
+    }
+
+    fn refresh_devices(&mut self) {
+        let devices = self
+            .backend
+            .as_ref()
+            .expect("Program is running with empty backend")
+            .devices();
+        self.devices_model =
+            DevicesModel::from_devices(devices, Some(std::mem::take(&mut self.devices_model)));
+    }
+
+    fn change_camera(&mut self, serial: String) {
+        let ok = self.devices_model.select_device(serial);
+        if let Err(e) = ok {
+            self.status = Message::error(e.to_string());
+        }
+    }
+
+    fn select_sensor(&mut self, sensor: String) {
+        let ok = self.devices_model.select_sensor(sensor);
+        if let Err(e) = ok {
+            self.status = Message::error(e.to_string());
+        }
+    }
+
+    fn select_stream(&mut self, stream: realsense_rust::kind::Rs2StreamKind) {
+        let ok = self.devices_model.select_stream(stream);
+        if let Err(e) = ok {
+            self.status = Message::error(e.to_string());
+        }
+    }
+
+    fn select_mode(&mut self, mode: crate::core::Mode) {
+        let ok = self.devices_model.select_mode(mode);
+        if let Err(e) = ok {
+            self.status = Message::error(e.to_string());
+        }
     }
 }
 

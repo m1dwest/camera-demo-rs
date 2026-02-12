@@ -69,12 +69,28 @@ impl Capabilities {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Mode {
     pub format: Rs2Format,
     pub framerate: i32,
     pub width: Option<usize>,
     pub height: Option<usize>,
+}
+
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.width.is_none() || self.height.is_none() {
+            write!(f, "Unknown resolution, {} Hz", self.framerate)
+        } else {
+            write!(
+                f,
+                "{}x{}, {} Hz",
+                self.width.unwrap(),
+                self.height.unwrap(),
+                self.framerate
+            )
+        }
+    }
 }
 
 impl Mode {
@@ -84,12 +100,12 @@ impl Mode {
             Err(_) => (None, None),
         };
 
-        return Self {
+        Self {
             format: profile.format(),
             framerate: profile.framerate(),
             width,
             height,
-        };
+        }
     }
 }
 

@@ -43,7 +43,7 @@ impl Message {
         }
     }
 
-    pub fn _error(message: impl Into<String>) -> Self {
+    pub fn error(message: impl Into<String>) -> Self {
         Self {
             message_type: MessageType::Error,
             text: message.into(),
