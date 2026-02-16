@@ -3,11 +3,13 @@ use eframe::egui;
 use crate::app::actions::Action;
 use crate::core::DevicesModel;
 
-pub struct DeviceModePanel {}
+pub struct DeviceModePanel {
+    pub is_camera_active: bool,
+}
 
 impl DeviceModePanel {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(is_camera_active: bool) -> Self {
+        Self { is_camera_active }
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui, model: &DevicesModel) -> Vec<Action> {
@@ -66,14 +68,33 @@ impl DeviceModePanel {
                 let selected_mode = model.selected_mode();
 
                 for mode in model.modes() {
-                    let is_selected = selected_mode.as_ref().is_some_and(|m| m == &mode);
+                    let is_selected = selected_mode.as_ref().is_some_and(|m| m == mode);
 
                     if ui.selectable_label(is_selected, mode.to_string()).clicked() {
-                        actions.push(Action::SelectMode { mode: mode.clone() });
+                        actions.push(Action::SelectMode { mode: *mode });
                     }
                 }
             });
+        ui.add_space(24.0);
+
+        ui.horizontal(|ui| {
+            ui.add_enabled_ui(!self.is_camera_active, |ui| {
+                if ui.button("Start").clicked() {
+                    actions.push(Action::StartCamera);
+                }
+            });
+
+            ui.add_enabled_ui(self.is_camera_active, |ui| {
+                if ui.button("Stop").clicked() {
+                    actions.push(Action::StopCamera);
+                }
+            });
+        });
 
         actions
+    }
+
+    pub fn set_camera_active(&mut self, is_active: bool) {
+        self.is_camera_active = is_active;
     }
 }

@@ -41,7 +41,7 @@ where
         .ok()
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Copy)]
 pub struct Mode {
     pub framerate: i32,
     pub width: usize,
