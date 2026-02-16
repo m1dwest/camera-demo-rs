@@ -1,7 +1,8 @@
 use crate::core::Device;
 use crate::core::Mode;
+use crate::core::Stream;
 
-use realsense_rust::kind::Rs2StreamKind;
+use realsense_rust::kind::{Rs2Format, Rs2StreamKind};
 
 #[derive(Default)]
 pub struct DevicesModel {
@@ -35,7 +36,7 @@ impl DevicesModel {
         let selected_serial = selected_device.and_then(|d| d.serial.clone());
         let sensors = selected_device
             .map(|d| {
-                let s: Vec<_> = d.capabilities.iter().map(|c| c.0.clone()).collect();
+                let s: Vec<_> = d.sensors.iter().map(|s| s.name.clone()).collect();
                 s
             })
             .unwrap_or_default();
@@ -59,18 +60,18 @@ impl DevicesModel {
             .iter()
             .find(|d| d.serial.as_deref() == Some(serial.as_str()));
 
-        if let Some(device) = device {
-            self.selected_serial = Some(serial.to_owned());
-            self.sensors = device.capabilities.iter().map(|c| c.0.clone()).collect();
-            self.selected_sensor = None;
-            self.streams.clear();
-            self.selected_stream = None;
-            self.modes.clear();
-            self.selected_mode = None;
-            Ok(())
-        } else {
-            anyhow::bail!("No device with serial {} was found", serial);
-        }
+        let Some(device) = device else {
+            anyhow::bail!("Logic error. No device with serial {} was found", serial);
+        };
+
+        self.selected_serial = Some(serial.to_owned());
+        self.sensors = device.sensors.iter().map(|s| s.name.clone()).collect();
+        self.selected_sensor = None;
+        self.streams.clear();
+        self.selected_stream = None;
+        self.modes.clear();
+        self.selected_mode = None;
+        Ok(())
     }
 
     pub fn selected_device(&self) -> Option<&Device> {
@@ -89,24 +90,25 @@ impl DevicesModel {
             anyhow::bail!("Logic error. Unable to select sensor without active device");
         };
 
-        let streams = selected_device.capabilities.iter().find_map(|(s, cap)| {
-            if s.as_str() == sensor {
-                Some(cap.get_streams())
+        let streams = selected_device.sensors.iter().find_map(|s| {
+            if s.name == sensor {
+                let streams: Vec<_> = s.streams.iter().map(|c| c.kind).collect();
+                Some(streams)
             } else {
                 None
             }
         });
 
-        if let Some(streams) = streams {
-            self.selected_sensor = Some(sensor.to_owned());
-            self.streams = streams;
-            self.selected_stream = None;
-            self.modes.clear();
-            self.selected_mode = None;
-            Ok(())
-        } else {
-            anyhow::bail!("No sensor with name {} available", sensor);
-        }
+        let Some(streams) = streams else {
+            anyhow::bail!("Logic error. No sensor with name {} available", sensor);
+        };
+
+        self.selected_sensor = Some(sensor.to_owned());
+        self.streams = streams;
+        self.selected_stream = None;
+        self.modes.clear();
+        self.selected_mode = None;
+        Ok(())
     }
 
     pub fn selected_sensor(&self) -> Option<&str> {
@@ -127,34 +129,44 @@ impl DevicesModel {
             anyhow::bail!("Logic error. Unable to select stream without active device");
         };
 
-        if self.sensors.is_empty() {
+        let Some(selected_sensor) = self.selected_sensor() else {
             anyhow::bail!("Logic error. Unable to select stream without active sensor");
-        }
+        };
 
-        let cap = selected_device
-            .capabilities
-            .iter()
-            .find_map(|(sensor, cap)| {
-                if Some(sensor) == self.selected_sensor.as_ref() {
-                    Some(cap)
-                } else {
-                    None
-                }
-            });
+        let streams = selected_device.sensors.iter().find_map(|sensor| {
+            if sensor.name == selected_sensor {
+                Some(&sensor.streams)
+            } else {
+                None
+            }
+        });
 
-        let modes = cap
-            .iter()
-            .find_map(|cap| cap.get_modes_for(stream))
-            .cloned();
+        let Some(streams) = streams else {
+            anyhow::bail!(
+                "Logic error. No sensor with name {} available",
+                selected_sensor
+            );
+        };
 
-        if let Some(modes) = modes {
-            self.selected_stream = Some(stream);
-            self.modes = modes;
-            self.selected_mode = None;
-            Ok(())
-        } else {
-            anyhow::bail!("No stream {} available", stream);
-        }
+        let modes = streams.iter().find_map(|s| {
+            if s.kind == stream {
+                let modes: Vec<_> = s.profiles.iter().map(|p| p.mode.clone()).collect();
+                Some(modes)
+            } else {
+                None
+            }
+        });
+
+        let Some(mut modes) = modes else {
+            anyhow::bail!("Logic error. No stream {} available", stream);
+        };
+
+        modes.sort_by_key(|m| std::cmp::Reverse(m.width));
+
+        self.selected_stream = Some(stream);
+        self.modes = modes;
+        self.selected_mode = None;
+        Ok(())
     }
 
     pub fn selected_stream(&self) -> Option<Rs2StreamKind> {
@@ -186,8 +198,8 @@ impl DevicesModel {
         }
     }
 
-    pub fn selected_mode(&self) -> Option<Mode> {
-        self.selected_mode
+    pub fn selected_mode(&self) -> Option<&Mode> {
+        self.selected_mode.as_ref()
     }
 
     pub fn modes(&self) -> &Vec<Mode> {

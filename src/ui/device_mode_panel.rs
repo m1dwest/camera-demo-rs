@@ -1,6 +1,6 @@
 use eframe::egui;
 
-use crate::actions::Action;
+use crate::app::actions::Action;
 use crate::core::DevicesModel;
 
 pub struct DeviceModePanel {}
@@ -66,14 +66,10 @@ impl DeviceModePanel {
                 let selected_mode = model.selected_mode();
 
                 for mode in model.modes() {
-                    let is_selected = selected_mode.as_ref().is_some_and(|m| m == mode);
-                    let is_valid = mode.width.is_some() && mode.height.is_some();
-                    if !is_valid {
-                        continue;
-                    }
+                    let is_selected = selected_mode.as_ref().is_some_and(|m| m == &mode);
 
                     if ui.selectable_label(is_selected, mode.to_string()).clicked() {
-                        actions.push(Action::SelectMode { mode: *mode });
+                        actions.push(Action::SelectMode { mode: mode.clone() });
                     }
                 }
             });

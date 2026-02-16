@@ -41,71 +41,95 @@ where
         .ok()
 }
 
-pub struct Capabilities(Vec<(Rs2StreamKind, Vec<Mode>)>);
-
-impl Capabilities {
-    fn from_sensor(sensor: &rs::sensor::Sensor) -> Capabilities {
-        use std::collections::HashMap;
-
-        let mut groups: HashMap<Rs2StreamKind, Vec<Mode>> = HashMap::new();
-
-        for p in &sensor.stream_profiles() {
-            let stream = p.kind();
-            let cap = Mode::from_profile(p);
-            groups.entry(stream).or_default().push(cap);
-        }
-
-        Capabilities(groups.into_iter().collect())
-    }
-
-    pub fn get_streams(&self) -> Vec<Rs2StreamKind> {
-        self.0.iter().map(|(k, _)| *k).collect()
-    }
-
-    pub fn get_modes_for(&self, stream: Rs2StreamKind) -> Option<&Vec<Mode>> {
-        self.0
-            .iter()
-            .find_map(|(k, m)| if *k == stream { Some(m) } else { None })
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash)]
 pub struct Mode {
-    pub format: Rs2Format,
     pub framerate: i32,
-    pub width: Option<usize>,
-    pub height: Option<usize>,
+    pub width: usize,
+    pub height: usize,
 }
+
+pub struct Profile {
+    pub mode: Mode,
+    pub formats: Vec<Rs2Format>,
+}
+
+impl PartialEq for Mode {
+    fn eq(&self, other: &Self) -> bool {
+        self.framerate == other.framerate
+            && self.width == other.width
+            && self.height == other.height
+    }
+}
+
+impl Eq for Mode {}
 
 impl std::fmt::Display for Mode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.width.is_none() || self.height.is_none() {
-            write!(f, "Unknown resolution, {} Hz", self.framerate)
-        } else {
-            write!(
-                f,
-                "{}x{}, {} Hz",
-                self.width.unwrap(),
-                self.height.unwrap(),
-                self.framerate
-            )
-        }
+        write!(f, "{}x{}, {} Hz", self.width, self.height, self.framerate)
     }
 }
 
-impl Mode {
-    fn from_profile(profile: &rs::stream_profile::StreamProfile) -> Mode {
-        let (width, height) = match profile.intrinsics() {
-            Ok(i) => (Some(i.width()), Some(i.height())),
-            Err(_) => (None, None),
-        };
+pub struct Stream {
+    pub kind: Rs2StreamKind,
+    pub profiles: Vec<Profile>,
+}
 
-        Self {
-            format: profile.format(),
-            framerate: profile.framerate(),
-            width,
-            height,
+pub struct Sensor {
+    pub name: String,
+    pub streams: Vec<Stream>,
+}
+
+impl Stream {
+    fn from_sensor(sensor: &rs::sensor::Sensor) -> Vec<Stream> {
+        use std::collections::{HashMap, HashSet};
+
+        type ModesMap = HashMap<Mode, HashSet<Rs2Format>>;
+        type KindsMap = HashMap<Rs2StreamKind, ModesMap>;
+
+        let mut modes: ModesMap = HashMap::new();
+        let mut kinds: KindsMap = HashMap::new();
+
+        for p in &sensor.stream_profiles() {
+            let stream = p.kind();
+
+            let framerate = p.framerate();
+            let (width, height) = match p.intrinsics() {
+                Ok(i) => (i.width(), i.height()),
+                Err(_) => {
+                    continue;
+                }
+            };
+
+            let key = Mode {
+                framerate,
+                width,
+                height,
+            };
+
+            kinds
+                .entry(stream)
+                .or_default()
+                .entry(key)
+                .or_default()
+                .insert(p.format());
         }
+
+        kinds
+            .into_iter()
+            .map(|(kind, modes_map)| {
+                let profiles: Vec<_> = modes_map
+                    .into_iter()
+                    .map(|(mut mode, formats_set)| {
+                        let mut formats: Vec<_> = formats_set.into_iter().collect();
+                        formats.sort_by_key(|&f| f as i32);
+
+                        Profile { formats, mode }
+                    })
+                    .collect();
+
+                Stream { kind, profiles }
+            })
+            .collect()
     }
 }
 
@@ -114,7 +138,7 @@ pub struct Device {
     pub serial: Option<String>,
 
     pub usb_type: Option<f32>,
-    pub capabilities: Vec<(String, Capabilities)>,
+    pub sensors: Vec<Sensor>,
 }
 
 pub struct RealSenseBackend {
@@ -158,7 +182,7 @@ impl RealSenseBackend {
                     "Rs2CameraInfo::UsbTypeDescriptor",
                 );
 
-                let capabilities = device
+                let sensors = device
                     .sensors()
                     .iter()
                     .map(|sensor| {
@@ -168,9 +192,9 @@ impl RealSenseBackend {
                             "Rs2CameraInfo::Name",
                         )
                         .unwrap_or(Self::UNKNOWN_NAME.to_owned());
-                        let cap = Capabilities::from_sensor(sensor);
+                        let streams = Stream::from_sensor(sensor);
 
-                        (name, cap)
+                        Sensor { name, streams }
                     })
                     .collect();
 
@@ -178,24 +202,10 @@ impl RealSenseBackend {
                     name,
                     serial,
                     usb_type,
-                    capabilities,
+                    sensors,
                 }
             })
             .collect();
-
-        result.push(Device {
-            name: "Some device name".to_owned(),
-            serial: None,
-            usb_type: None,
-            capabilities: Vec::new(),
-        });
-
-        result.push(Device {
-            name: "Some valid dev".to_owned(),
-            serial: Some("ssserial".to_owned()),
-            usb_type: None,
-            capabilities: Vec::new(),
-        });
 
         result
     }

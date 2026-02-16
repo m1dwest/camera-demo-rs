@@ -1,6 +1,6 @@
 use eframe::egui;
 
-use crate::actions::Action;
+use crate::app::actions::Action;
 use crate::core::Device;
 use crate::core::devices_model::DevicesModel;
 
