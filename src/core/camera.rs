@@ -1,4 +1,4 @@
-use realsense_rust as rs;
+use realsense_rust::{self as rs, frame::FrameEx};
 
 use crate::core::Mode;
 
@@ -6,15 +6,23 @@ use anyhow::{Context as _, Result};
 use realsense_rust::{
     config::Config,
     context::Context,
-    frame::{ColorFrame, CompositeFrame},
+    frame::{ColorFrame, ImageFrame},
     kind::Rs2StreamKind,
     pipeline::{ActivePipeline, FrameWaitError},
 };
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, c_void};
+
+unsafe fn frame_as_bytes<T>(frame: &ImageFrame<T>) -> &[u8] {
+    let len = frame.get_data_size();
+    let ptr = frame.get_data() as *const c_void as *const u8;
+    std::slice::from_raw_parts(ptr, len)
+}
 
 pub struct Camera {
     // context: Context,
     pipeline: ActivePipeline,
+    mode: Mode,
+    stream: Rs2StreamKind,
 }
 
 impl Camera {
@@ -46,24 +54,42 @@ impl Camera {
 
         let pipeline = pipeline.start(Some(config))?;
 
-        Ok(Self { pipeline })
+        Ok(Self {
+            pipeline,
+            mode,
+            stream,
+        })
     }
 
-    pub fn wait_for_wrames(&mut self) {
+    // TODO: mut?
+    pub fn wait_for_frames(&mut self) -> anyhow::Result<Vec<u8>> {
         let timeout = std::time::Duration::from_millis(1000);
-        let result = self.pipeline.wait(Some(timeout));
+        let frames = self.pipeline.wait(Some(timeout))?;
 
-        // TODO: return result
-        let Ok(frames) = result else {
-            return;
-        };
+        let color_frames = frames.frames_of_type::<ColorFrame>();
 
-        let color = frames.frames_of_type::<ColorFrame>();
-
-        if color.is_empty() {
+        if color_frames.is_empty() {
             // no frames
         }
 
-        log::info!("frames count: {}", color.len());
+        let color_frame = color_frames.first().unwrap();
+        let data_size = color_frame.get_data_size();
+        // TODO: from format
+        // if data_size_expected != color_frame.get_data_size {
+        //     anyhow::bail!("Unexpected color frame data size");
+        // }
+
+        // TODO: optimize allocation
+        unsafe { Ok(frame_as_bytes(color_frame).to_vec()) }
+
+        // log::info!("frames count: {}", color_frame.len());
+    }
+
+    pub fn width(&self) -> usize {
+        self.mode.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.mode.height
     }
 }

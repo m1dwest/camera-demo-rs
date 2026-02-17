@@ -2,7 +2,8 @@ use crate::core::Device;
 use crate::core::Mode;
 use crate::core::Stream;
 
-use serde::Serialize;
+use anyhow::Context;
+use serde::{Deserialize, Serialize};
 
 use realsense_rust::kind::{Rs2Format, Rs2StreamKind};
 
@@ -21,7 +22,7 @@ pub struct DevicesModel {
     selected_mode: Option<Mode>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Config {
     pub selected_serial: Option<String>,
     pub selected_sensor: Option<String>,
@@ -223,5 +224,36 @@ impl DevicesModel {
             selected_stream: self.selected_stream.map(|s| s as i32),
             selected_mode: self.selected_mode,
         }
+    }
+
+    pub fn apply_config(&mut self, config: Config) -> anyhow::Result<()> {
+        if let Some(s) = config.selected_serial {
+            self.select_device(s)?;
+        } else {
+            return Ok(());
+        }
+
+        if let Some(s) = config.selected_sensor {
+            self.select_sensor(s)?;
+        } else {
+            return Ok(());
+        }
+
+        if let Some(s) = config.selected_stream {
+            use num_traits::FromPrimitive;
+            let kind =
+                Rs2StreamKind::from_i32(s).context("Unable to parse Rs2StreamKind from {s}")?;
+            self.select_stream(kind)?;
+        } else {
+            return Ok(());
+        }
+
+        if let Some(m) = config.selected_mode {
+            self.select_mode(m)?;
+        } else {
+            return Ok(());
+        }
+
+        Ok(())
     }
 }

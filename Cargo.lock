@@ -622,6 +622,7 @@ dependencies = [
  "egui_extras",
  "env_logger",
  "log",
+ "num-traits",
  "realsense-rust",
  "serde",
 ]

@@ -2,7 +2,7 @@ use realsense_rust as rs;
 
 use anyhow::{Context as _, Result};
 use rs::kind::{Rs2CameraInfo, Rs2Format, Rs2ProductLine, Rs2StreamKind};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::ffi::CStr;
 
 trait InfoProvider {
@@ -42,7 +42,7 @@ where
         .ok()
 }
 
-#[derive(Debug, Clone, Hash, Copy, Serialize)]
+#[derive(Debug, Clone, Hash, Copy, Serialize, Deserialize)]
 pub struct Mode {
     pub framerate: i32,
     pub width: usize,

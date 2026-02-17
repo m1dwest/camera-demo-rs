@@ -9,7 +9,7 @@ use log::{debug, error, info};
 use realsense_rust as rs;
 
 use crate::core::{Camera, DevicesModel, RealSenseBackend};
-use crate::ui::{device_mode_panel::DeviceModePanel, devices_combo_box::DevicesComboBox};
+use crate::ui::{CameraView, DeviceModePanel, DevicesComboBox};
 use actions::Action;
 // use config::Config;
 
@@ -25,7 +25,9 @@ struct App {
     device_mode_panel: DeviceModePanel,
 
     camera: Option<Camera>,
-
+    camera_view: CameraView,
+    // TODO: separate widget
+    // color_image: Option<egui::ColorImage>,
     fatal_error: Option<String>,
 }
 
@@ -43,7 +45,7 @@ impl App {
 
         let devices_combo_box = DevicesComboBox::new("Available devices");
 
-        Self {
+        let mut result = Self {
             backend,
             status: Message::none(),
 
@@ -52,9 +54,19 @@ impl App {
             device_mode_panel: DeviceModePanel::new(false),
 
             camera: None,
+            camera_view: CameraView::new(),
 
             fatal_error,
-        }
+        };
+
+        let apply = confy::load_path("config.toml")
+            .map_err(|e| e.to_string())
+            .and_then(|config| result.apply_config(config).map_err(|e| e.to_string()));
+        if let Err(e) = apply {
+            result.status = Message::error(format!("Unable to apply conifg: {}", e));
+        };
+
+        result
     }
 
     fn show_ui(&mut self, ctx: &egui::Context) -> Vec<Action> {
@@ -84,11 +96,9 @@ impl App {
                 actions.extend(device_mode_actions);
             });
 
-        if let Some(camera) = self.camera.as_mut() {
-            camera.wait_for_wrames();
-        }
         egui::CentralPanel::default().show(ctx, |ui| {
-            //
+            let size = ui.max_rect().size();
+            self.camera_view.show(ui, Some(size));
         });
 
         actions
@@ -218,10 +228,27 @@ impl App {
             devices_model: self.devices_model.export_config(),
         }
     }
+
+    fn apply_config(&mut self, config: Config) -> anyhow::Result<()> {
+        self.devices_model.apply_config(config.devices_model)
+    }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if let Some(camera) = self.camera.as_mut() {
+            if let Ok(frames) = camera.wait_for_frames() {
+                self.camera_view.update_frame(
+                    ctx,
+                    &frames,
+                    camera.width(),
+                    camera.height(),
+                    crate::ui::camera_view::PixelFormat::Rgb8,
+                );
+            };
+            log::info!("Update");
+            // TODO: frame error
+        };
         let actions = self.show_ui(ctx);
         self.execute_actions(actions);
     }
