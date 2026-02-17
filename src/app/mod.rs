@@ -13,6 +13,7 @@ use crate::ui::{device_mode_panel::DeviceModePanel, devices_combo_box::DevicesCo
 use actions::Action;
 // use config::Config;
 
+use crate::app::config::Config;
 use crate::ui::status_bar::Message;
 
 struct App {
@@ -212,11 +213,11 @@ impl App {
         Ok(())
     }
 
-    // fn export_config(&self) -> Config {
-    //     Config {
-    //         devices_model: self.devices_model.export_config(),
-    //     }
-    // }
+    fn export_config(&self) -> Config {
+        Config {
+            devices_model: self.devices_model.export_config(),
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -225,10 +226,20 @@ impl eframe::App for App {
         self.execute_actions(actions);
     }
 
-    // fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-    //     let cfg = self.export_config();
-    //     confy::store("config.toml", None, cfg);
-    // }
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let cfg = self.export_config();
+        log::info!("on exit");
+        let selected_serial = cfg
+            .devices_model
+            .selected_serial
+            .clone()
+            .unwrap_or("Nothing".to_owned());
+        log::info!("selected serial: {selected_serial}");
+        let result = confy::store_path("config.toml", cfg);
+        if let Err(e) = result {
+            log::error!("error: {e}");
+        }
+    }
 }
 
 pub fn run() -> eframe::Result {

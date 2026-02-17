@@ -2,6 +2,8 @@ use crate::core::Device;
 use crate::core::Mode;
 use crate::core::Stream;
 
+use serde::Serialize;
+
 use realsense_rust::kind::{Rs2Format, Rs2StreamKind};
 
 #[derive(Default)]
@@ -17,6 +19,14 @@ pub struct DevicesModel {
 
     modes: Vec<Mode>,
     selected_mode: Option<Mode>,
+}
+
+#[derive(Serialize)]
+pub struct Config {
+    pub selected_serial: Option<String>,
+    pub selected_sensor: Option<String>,
+    pub selected_stream: Option<i32>,
+    pub selected_mode: Option<Mode>,
 }
 
 impl DevicesModel {
@@ -204,5 +214,14 @@ impl DevicesModel {
 
     pub fn modes(&self) -> &Vec<Mode> {
         &self.modes
+    }
+
+    pub fn export_config(&self) -> Config {
+        Config {
+            selected_serial: self.selected_serial.clone(),
+            selected_sensor: self.selected_sensor.clone(),
+            selected_stream: self.selected_stream.map(|s| s as i32),
+            selected_mode: self.selected_mode,
+        }
     }
 }
