@@ -83,6 +83,9 @@ impl App {
                 actions.extend(device_mode_actions);
             });
 
+        if let Some(camera) = self.camera.as_mut() {
+            camera.wait_for_wrames();
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             //
         });
@@ -205,6 +208,7 @@ impl App {
                 anyhow::bail!(e.to_string());
             }
         };
+
         Ok(())
     }
 

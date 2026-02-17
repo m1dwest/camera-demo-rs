@@ -6,14 +6,15 @@ use anyhow::{Context as _, Result};
 use realsense_rust::{
     config::Config,
     context::Context,
+    frame::{ColorFrame, CompositeFrame},
     kind::Rs2StreamKind,
-    pipeline::{ActivePipeline, InactivePipeline},
+    pipeline::{ActivePipeline, FrameWaitError},
 };
 use std::ffi::{CStr, CString};
 
 pub struct Camera {
     // context: Context,
-    // pipe: ActivePipeline,
+    pipeline: ActivePipeline,
 }
 
 impl Camera {
@@ -43,8 +44,26 @@ impl Camera {
                 mode.framerate as usize,
             )?;
 
-        let mut pipeline = pipeline.start(Some(config))?;
+        let pipeline = pipeline.start(Some(config))?;
 
-        Ok(Self {})
+        Ok(Self { pipeline })
+    }
+
+    pub fn wait_for_wrames(&mut self) {
+        let timeout = std::time::Duration::from_millis(1000);
+        let result = self.pipeline.wait(Some(timeout));
+
+        // TODO: return result
+        let Ok(frames) = result else {
+            return;
+        };
+
+        let color = frames.frames_of_type::<ColorFrame>();
+
+        if color.is_empty() {
+            // no frames
+        }
+
+        log::info!("frames count: {}", color.len());
     }
 }
