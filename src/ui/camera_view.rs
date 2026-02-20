@@ -1,9 +1,7 @@
 use eframe::egui;
 use eframe::egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui, Vec2};
 
-pub enum PixelFormat {
-    Rgb8,
-}
+use crate::app::PixelFormat;
 
 pub struct CameraView {
     texture: Option<TextureHandle>,
@@ -26,24 +24,33 @@ impl CameraView {
         height: usize,
         format: PixelFormat,
     ) {
-        self.ensure_size(width, height);
-        self.fill_color_image(bytes, format);
+        let color_image = egui::ColorImage::from_rgb([width, height], &bytes);
+        let texture = self.texture.get_or_insert_with(|| {
+            ctx.load_texture("video_frame", color_image.clone(), Default::default())
+        });
 
-        match &mut self.texture {
-            None => {
-                self.texture = Some(ctx.load_texture(
-                    "camera_frame",
-                    self.image.clone(),
-                    TextureOptions::LINEAR,
-                ));
-            }
-            Some(tex) => {
-                tex.set(self.image.clone(), TextureOptions::LINEAR);
-            }
-        }
+        texture.set(color_image, egui::TextureOptions::LINEAR);
+        // self.ensure_size(width, height);
+        // self.fill_color_image(bytes, format);
+        //
+        // match &mut self.texture {
+        //     None => {
+        //         self.texture = Some(ctx.load_texture(
+        //             "camera_frame",
+        //             self.image.clone(),
+        //             TextureOptions::LINEAR,
+        //         ));
+        //     }
+        //     Some(tex) => {
+        //         tex.set(self.image.clone(), TextureOptions::LINEAR);
+        //     }
+        // }
     }
 
-    pub fn show(&self, ui: &mut Ui, desired_size: Option<Vec2>) {
+    pub fn show(&mut self, ui: &mut Ui, desired_size: Option<Vec2>) {
+        // if let Some(tex) = self.texture {
+        //     ui.image(tex);
+        // }
         let Some(tex) = &self.texture else {
             return;
         };

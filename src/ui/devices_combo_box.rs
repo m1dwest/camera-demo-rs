@@ -61,7 +61,7 @@ impl DevicesComboBox {
         let selected_text = model
             .selected_device()
             .map(decorated_name)
-            .unwrap_or_default();
+            .unwrap_or("Select device".to_owned());
 
         egui::ComboBox::from_label(self.label.clone())
             .selected_text(selected_text)
