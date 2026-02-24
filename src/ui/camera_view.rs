@@ -1,7 +1,7 @@
 use eframe::egui;
 use eframe::egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui, Vec2};
 
-use crate::app::PixelFormat;
+use crate::core::PixelFormat;
 
 pub struct CameraView {
     texture: Option<TextureHandle>,
@@ -87,4 +87,3 @@ impl CameraView {
         }
     }
 }
-

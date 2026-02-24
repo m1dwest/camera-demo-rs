@@ -59,9 +59,9 @@ impl DevicesComboBox {
         let mut actions = Vec::new();
 
         let selected_text = model
-            .selected_device()
-            .map(decorated_name)
-            .unwrap_or("Select device".to_owned());
+            .selected_device_name()
+            .unwrap_or("Select device")
+            .to_owned();
 
         egui::ComboBox::from_label(self.label.clone())
             .selected_text(selected_text)
@@ -69,13 +69,11 @@ impl DevicesComboBox {
                 model.devices.iter().for_each(|device| {
                     let name = decorated_name(device);
 
-                    let is_device_selected = match (
-                        model.selected_device().and_then(|d| d.serial.as_ref()),
-                        &device.serial,
-                    ) {
-                        (Some(a), Some(b)) => a == b,
-                        _ => false,
-                    };
+                    let is_device_selected =
+                        match (model.selected_device_serial(), device.serial.as_deref()) {
+                            (Some(a), Some(b)) => a == b,
+                            _ => false,
+                        };
 
                     if !ui.selectable_label(is_device_selected, name).clicked() {
                         return;

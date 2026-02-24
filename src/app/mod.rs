@@ -18,7 +18,7 @@ use eframe::egui;
 use log::{debug, error, info};
 use realsense_rust as rs;
 
-use crate::core::{Camera, DevicesModel, Frame, RealSenseBackend};
+use crate::core::{Camera, DevicesModel, Frame, PixelFormat, RealSenseBackend};
 use crate::ui::{CameraView, DeviceModePanel, DevicesComboBox};
 use actions::{Action, CameraAction};
 // use config::Config;
@@ -200,6 +200,10 @@ impl App {
                 info!("Action::SelectMode {}", mode);
                 self.select_mode(mode);
             }
+            Action::SelectFormat { format } => {
+                info!("Action::SelectFormat {}", format);
+                self.select_format(format);
+            }
             Action::None => {}
         });
     }
@@ -242,16 +246,20 @@ impl App {
         }
     }
 
+    fn select_format(&mut self, format: PixelFormat) {
+        let ok = self.devices_model.select_format(format);
+        if let Err(e) = ok {
+            self.status = Message::error(e.to_string());
+        }
+    }
+
     fn start_camera(&mut self, egui_ctx: &egui::Context) -> Result<CameraStatus> {
         let rs_ctx = self.backend.as_ref().map(|b| b.context());
         let Some(rs_ctx) = rs_ctx else {
             anyhow::bail!("Unable to start camera. No valid realsense2 context found");
         };
 
-        let serial = self
-            .devices_model
-            .selected_device()
-            .and_then(|d| d.serial.as_ref());
+        let serial = self.devices_model.selected_device_serial();
         let Some(serial) = serial else {
             anyhow::bail!("Unable to start camera. Select the device first");
         };
@@ -266,13 +274,12 @@ impl App {
             anyhow::bail!("Unable to start camera. Select the resolution first");
         };
 
-        let camera = Camera::new(
-            serial,
-            stream,
-            realsense_rust::kind::Rs2Format::Rgb8,
-            mode,
-            rs_ctx,
-        );
+        let format = self.devices_model.selected_format();
+        let Some(format) = format else {
+            anyhow::bail!("Unable to start camera. Select the format first");
+        };
+
+        let camera = Camera::new(serial, stream, format, mode, rs_ctx);
 
         match camera {
             Ok(c) => {
@@ -319,19 +326,12 @@ impl eframe::App for App {
         let actions = self.show_ui(ctx);
         self.execute_actions(actions, ctx);
         ctx.request_repaint();
-        // ctx.request_repaint_after(Duration::from_millis(16));
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         let cfg = self.export_config();
-        log::info!("on exit");
-        let selected_serial = cfg
-            .devices_model
-            .selected_serial
-            .clone()
-            .unwrap_or("Nothing".to_owned());
-        log::info!("selected serial: {selected_serial}");
         let result = confy::store_path("config.toml", cfg);
+
         if let Err(e) = result {
             log::error!("error: {e}");
         }
@@ -352,10 +352,6 @@ pub fn run() -> eframe::Result {
             Ok(Box::new(App::new()))
         }),
     )
-}
-
-pub enum PixelFormat {
-    Rgb8,
 }
 
 fn start_capture_thread(

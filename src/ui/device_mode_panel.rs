@@ -75,6 +75,29 @@ impl DeviceModePanel {
                     }
                 }
             });
+
+        let format_text = model
+            .selected_format()
+            .map(|f| f.to_string())
+            .unwrap_or("Select format".to_owned());
+
+        egui::ComboBox::from_label("Format")
+            .selected_text(format_text)
+            .show_ui(ui, |ui| {
+                let selected_format = model.selected_format();
+
+                for &format in model.formats() {
+                    let is_selected = selected_format.is_some_and(|f| f == format);
+
+                    if ui
+                        .selectable_label(is_selected, format.to_string())
+                        .clicked()
+                    {
+                        actions.push(Action::SelectFormat { format });
+                    }
+                }
+            });
+
         ui.add_space(24.0);
 
         ui.horizontal(|ui| {

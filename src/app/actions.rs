@@ -10,6 +10,7 @@ pub enum Action {
     SelectSensor { sensor: String },
     SelectStream { stream: Rs2StreamKind },
     SelectMode { mode: crate::core::Mode },
+    SelectFormat { format: crate::core::PixelFormat },
 }
 
 pub enum CameraAction {
