@@ -296,19 +296,7 @@ impl App {
         Ok(CameraStatus::started(mode.width, mode.height))
     }
 
-    fn export_config(&self) -> Config {
-        Config {
-            devices_model: self.devices_model.export_config(),
-        }
-    }
-
-    fn apply_config(&mut self, config: Config) -> anyhow::Result<()> {
-        self.devices_model.apply_config(config.devices_model)
-    }
-}
-
-impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update_frame(&mut self, ctx: &egui::Context) {
         let mut latest_frame: Option<Frame> = None;
         while let Ok(f) = self.frame_rx.try_recv() {
             latest_frame = Some(f);
@@ -323,9 +311,25 @@ impl eframe::App for App {
                 PixelFormat::Rgb8,
             );
         };
+    }
+
+    fn export_config(&self) -> Config {
+        Config {
+            devices_model: self.devices_model.export_config(),
+        }
+    }
+
+    fn apply_config(&mut self, config: Config) -> anyhow::Result<()> {
+        self.devices_model.apply_config(config.devices_model)
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.update_frame(ctx);
+
         let actions = self.show_ui(ctx);
         self.execute_actions(actions, ctx);
-        ctx.request_repaint();
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -390,4 +394,14 @@ fn start_capture_thread(
             egui_ctx.request_repaint();
         }
     })
+}
+
+fn drain_receiver<T>(rx: &Receiver<T>) -> usize {
+    let mut n = 0;
+
+    while rx.try_recv().is_ok() {
+        n += 1;
+    }
+
+    n
 }

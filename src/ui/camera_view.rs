@@ -3,6 +3,11 @@ use eframe::egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui,
 
 use crate::core::PixelFormat;
 
+fn scale_to_fit(to_scale: &Vec2, fit_into: &Vec2) -> Vec2 {
+    let ratio = (fit_into.x / to_scale.x).min(fit_into.y / to_scale.y);
+    Vec2::new(to_scale.x * ratio, to_scale.y * ratio)
+}
+
 pub struct CameraView {
     texture: Option<TextureHandle>,
     image: ColorImage,
@@ -57,7 +62,9 @@ impl CameraView {
 
         let tex_id = tex.id();
         let native_size = tex.size_vec2();
-        let size = desired_size.unwrap_or(native_size);
+        let size = desired_size
+            .map(|s| scale_to_fit(&native_size, &s))
+            .unwrap_or(native_size);
 
         let (rect, _resp) = ui.allocate_exact_size(size, egui::Sense::hover());
         let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
