@@ -1,6 +1,6 @@
-use realsense_rust::{self as rs, frame::FrameEx, kind::Rs2Format};
+use realsense_rust::{self as rs, frame::FrameEx};
 
-use crate::core::Mode;
+use crate::core::{Mode, PixelFormat};
 
 use anyhow::{Context as _, Result};
 use realsense_rust::{
@@ -45,7 +45,7 @@ impl Camera {
     pub fn new(
         serial: &str,
         stream: Rs2StreamKind,
-        format: Rs2Format,
+        format: PixelFormat,
         mode: Mode,
         context: &rs::context::Context,
     ) -> Result<Self> {
@@ -62,7 +62,7 @@ impl Camera {
                 None,
                 mode.width,
                 mode.height,
-                format,
+                format.into(),
                 mode.framerate as usize,
             )?;
 

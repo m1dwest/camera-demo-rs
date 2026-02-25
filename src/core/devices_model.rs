@@ -31,17 +31,37 @@ pub enum PixelFormat {
     Rgb8 = Rs2Format::Rgb8 as i32,
 }
 
-impl PixelFormat {
-    pub fn from_rs2format(format: Rs2Format) -> Option<Self> {
+pub struct UnsupportedPixelFormat;
+
+impl TryFrom<Rs2Format> for PixelFormat {
+    type Error = UnsupportedPixelFormat;
+
+    fn try_from(format: Rs2Format) -> Result<Self, Self::Error> {
         match format {
-            Rs2Format::Rgb8 => Some(PixelFormat::Rgb8),
-            _ => None,
+            Rs2Format::Rgb8 => Ok(PixelFormat::Rgb8),
+            _ => Err(UnsupportedPixelFormat),
         }
     }
+}
 
-    pub fn from_i32(format: i32) -> Option<Self> {
+impl From<PixelFormat> for Rs2Format {
+    fn from(val: PixelFormat) -> Self {
+        match val {
+            PixelFormat::Rgb8 => Rs2Format::Rgb8,
+        }
+    }
+}
+
+impl TryFrom<i32> for PixelFormat {
+    type Error = UnsupportedPixelFormat;
+
+    fn try_from(format: i32) -> Result<Self, Self::Error> {
         use num_traits::FromPrimitive;
-        PixelFormat::from_rs2format(Rs2Format::from_i32(format)?)
+
+        match Rs2Format::from_i32(format) {
+            Some(f) => PixelFormat::try_from(f),
+            None => Err(UnsupportedPixelFormat),
+        }
     }
 }
 
@@ -258,7 +278,7 @@ impl DevicesModel {
         self.sel_mode = Some(mode);
         self.formats = formats
             .iter()
-            .filter_map(|f| PixelFormat::from_rs2format(*f))
+            .filter_map(|f| PixelFormat::try_from(*f).ok())
             .collect();
         self.sel_format = None;
 
@@ -355,8 +375,9 @@ impl DevicesModel {
         }
 
         if let Some(f) = config.sel_format {
-            let format =
-                PixelFormat::from_i32(f).context("Unable to parse PixelFormat from {f}")?;
+            let format = PixelFormat::try_from(f)
+                .ok()
+                .context(format!("Unable to parse PixelFormat from {f}"))?;
             self.select_format(format)?;
         } else {
             return Ok(());
