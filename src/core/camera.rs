@@ -11,6 +11,7 @@ use realsense_rust::{
 };
 use std::ffi::{CString, c_void};
 
+#[derive(Clone)]
 pub struct Frame(Vec<u8>);
 
 pub struct Intrinsics {

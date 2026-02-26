@@ -14,8 +14,10 @@ pub enum Action {
 }
 
 pub struct InferenceConfig {
-    model_path: String,
-    classes_path: String,
+    pub model_path: String,
+    pub classes_path: String,
+    pub input_size: u32,
+    pub prob_threshold: f32,
 }
 
 pub enum VisionAction {

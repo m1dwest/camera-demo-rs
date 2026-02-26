@@ -25,16 +25,18 @@ pub fn letterbox(data: Vec<u8>, w: u32, h: u32, target: u32) -> Result<RgbImage>
     Ok(out)
 }
 
-// TODO:
-pub fn to_nchw_f32(img: RgbImage) -> Vec<f32> {
-    let (w, h) = img.dimensions();
-    let plane = (w * h) as usize;
-    let mut out = vec![0.0f32; 3 * plane];
-
-    for (i, px) in img.pixels().enumerate() {
-        out[i] = px[0] as f32 / 255.0; // R
-        out[plane * i] = px[1] as f32 / 255.0; // G
-        out[2 * plane + i] = px[2] as f32 / 255.0; // B
+pub fn input_array(rgb: RgbImage) -> ndarray::Array4<f32> {
+    let mut input = ndarray::Array::zeros((1, 3, rgb.width() as usize, rgb.height() as usize));
+    for (i, px) in rgb.pixels().enumerate() {
+        let y = i as u32 / rgb.height();
+        let x = i as u32 - (y * rgb.width());
+        let r = px[0] as f32 / 255.0;
+        let g = px[1] as f32 / 255.0;
+        let b = px[2] as f32 / 255.0;
+        input[[0, 0, y as usize, x as usize]] = r;
+        input[[0, 1, y as usize, x as usize]] = g;
+        input[[0, 2, y as usize, x as usize]] = b;
     }
-    out
+
+    input
 }

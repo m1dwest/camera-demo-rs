@@ -8,7 +8,7 @@ use log::info;
 
 use crate::core::{Camera, DevicesModel, PixelFormat, RealSenseBackend};
 use crate::ui::{CameraView, DeviceModePanel, DevicesComboBox};
-use actions::{Action, VisionAction};
+use actions::{Action, InferenceConfig, VisionAction};
 
 use crate::app::config::Config;
 use crate::ui::status_bar::Message;
@@ -95,7 +95,18 @@ impl App {
                     let device_mode_actions = self.device_mode_panel.show(ui, &self.devices_model);
                     actions.extend(device_mode_actions);
 
-                    ui.checkbox(&mut self.is_inference, "Enable inference");
+                    let mut is_inference_flag = self.is_inference;
+                    ui.checkbox(&mut is_inference_flag, "Enable inference");
+                    if is_inference_flag != self.is_inference {
+                        match self.send_inference_command(is_inference_flag) {
+                            Ok(()) => {
+                                self.is_inference = is_inference_flag;
+                            }
+                            Err(e) => {
+                                self.status = Message::error(e.to_string());
+                            }
+                        }
+                    }
                 });
             });
 
@@ -105,6 +116,31 @@ impl App {
         });
 
         actions
+    }
+
+    fn send_inference_command(&mut self, is_enabled: bool) -> anyhow::Result<()> {
+        let Some(vision) = self.vision_runner.as_mut() else {
+            anyhow::bail!("Vision runner is not active");
+        };
+
+        match is_enabled {
+            true => {
+                let config = InferenceConfig {
+                    model_path: "yolov12n.onnx".to_owned(),
+                    classes_path: "coco.names".to_owned(),
+                    input_size: 640,
+                    prob_threshold: 0.4,
+                };
+                vision
+                    .cmd_tx
+                    .try_send(VisionAction::EnableInference { config })?;
+            }
+            false => {
+                vision.cmd_tx.try_send(VisionAction::DisableInference)?;
+            }
+        };
+
+        Ok(())
     }
 
     fn execute_actions(&mut self, actions: Vec<Action>, ctx: &egui::Context) {
@@ -279,6 +315,9 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // if self.is_inference {
+        //
+        // }
         self.update_frame(ctx);
 
         let actions = self.show_ui(ctx);
