@@ -10,32 +10,60 @@ fn scale_to_fit(to_scale: &Vec2, fit_into: &Vec2) -> Vec2 {
 }
 
 pub struct CameraView {
-    texture: Option<TextureHandle>,
+    base_tex: Option<TextureHandle>,
+    overlay_tex: Option<TextureHandle>,
     image: ColorImage,
 }
 
 impl CameraView {
     pub fn new() -> Self {
         Self {
-            texture: None,
+            base_tex: None,
+            overlay_tex: None,
             image: ColorImage::new([1, 1], vec![Color32::BLACK]),
         }
     }
 
-    pub fn update_frame(&mut self, ctx: &egui::Context, frame: Frame, intrinsics: Intrinsics) {
-        let color_image =
-            egui::ColorImage::from_rgb([intrinsics.width, intrinsics.height], frame.as_slice());
-        let texture = self.texture.get_or_insert_with(|| {
+    pub fn update_frame(
+        &mut self,
+        ctx: &egui::Context,
+        frame: Frame,
+        overlay: Option<Frame>,
+        intrinsics: Intrinsics,
+    ) {
+        let size = [intrinsics.width, intrinsics.height];
+        let color_image = egui::ColorImage::from_rgb(size, frame.as_slice());
+        let base_tex = self.base_tex.get_or_insert_with(|| {
             ctx.load_texture("video_frame", color_image.clone(), Default::default())
         });
 
-        texture.set(color_image, egui::TextureOptions::LINEAR);
+        base_tex.set(color_image, egui::TextureOptions::LINEAR);
+
+        // let pixels: Vec<Color32> = overlay
+        //     .as_slice()
+        //     .chunks_exact(4)
+        //     .map(|p| Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
+        //     .collect();
+
+        if let Some(overlay) = overlay {
+            let overlay_image = egui::ColorImage::from_rgba_unmultiplied(size, overlay.as_slice());
+            let overlay_tex = self.overlay_tex.get_or_insert_with(|| {
+                ctx.load_texture(
+                    "video_frame_overlay",
+                    overlay_image.clone(),
+                    TextureOptions::LINEAR,
+                )
+            });
+
+            overlay_tex.set(overlay_image, TextureOptions::LINEAR);
+        }
+
         // self.ensure_size(width, height);
         // self.fill_color_image(bytes, format);
         //
-        // match &mut self.texture {
+        // match &mut self.base_tex {
         //     None => {
-        //         self.texture = Some(ctx.load_texture(
+        //         self.base_tex = Some(ctx.load_texture(
         //             "camera_frame",
         //             self.image.clone(),
         //             TextureOptions::LINEAR,
@@ -48,10 +76,10 @@ impl CameraView {
     }
 
     pub fn show(&mut self, ui: &mut Ui, desired_size: Option<Vec2>) {
-        // if let Some(tex) = self.texture {
+        // if let Some(tex) = self.base_tex {
         //     ui.image(tex);
         // }
-        let Some(tex) = &self.texture else {
+        let Some(tex) = &self.base_tex else {
             return;
         };
 
@@ -65,6 +93,10 @@ impl CameraView {
         let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
 
         ui.painter().image(tex_id, rect, uv, Color32::WHITE);
+
+        if let Some(overlay) = &self.overlay_tex {
+            ui.painter().image(overlay.id(), rect, uv, Color32::WHITE);
+        }
     }
 
     fn ensure_size(&mut self, width: usize, height: usize) {

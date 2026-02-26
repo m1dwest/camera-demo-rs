@@ -15,6 +15,16 @@ pub struct Frame {
     pub intrinsics: core::Intrinsics,
 }
 
+#[derive(Debug, Clone)]
+pub struct Detection {
+    pub x1: f32,
+    pub y1: f32,
+    pub x2: f32,
+    pub y2: f32,
+    pub score: f32,
+    pub label: Option<String>,
+}
+
 pub struct InferenceEngine {
     model: Session,
     classes: Vec<String>,
@@ -131,13 +141,36 @@ impl Worker {
                 }
             };
 
-            if self.is_inference_enabled {
-                let result = self.infere(frame.clone(), &intrinsics);
-            }
+            let overlay = if self.is_inference_enabled {
+                let detections = self.infere(frame.clone(), &intrinsics);
+                match detections {
+                    Ok(detections) => {
+                        match core::image::generate_overlay(
+                            intrinsics.width as u32,
+                            intrinsics.height as u32,
+                        ) {
+                            Ok(overlay) => Some(overlay),
+                            Err(e) => {
+                                self.send_error_or_log(anyhow!(
+                                    "Unable to generate overlay: {}",
+                                    e
+                                ));
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.send_error_or_log(anyhow!("Unable to infere: {}", e));
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
             let vision = Frame {
                 frame,
-                overlay: None,
+                overlay,
                 intrinsics,
             };
 
@@ -156,7 +189,11 @@ impl Worker {
             .inspect_err(|e| log::error!("{e}"));
     }
 
-    fn infere(&mut self, frame: core::Frame, intrinsics: &core::Intrinsics) -> anyhow::Result<()> {
+    fn infere(
+        &mut self,
+        frame: core::Frame,
+        intrinsics: &core::Intrinsics,
+    ) -> anyhow::Result<Vec<Detection>> {
         let Some(engine) = self.inference_engine.as_mut() else {
             anyhow::bail!("Unable to infere without inference engine");
         };
@@ -177,35 +214,79 @@ impl Worker {
         let input = TensorRef::from_array_view(&input)?;
 
         let outputs: SessionOutputs = engine.model.run(inputs!["images" => input])?;
-        let output = outputs["output0"]
-            .try_extract_array::<f32>()?
-            .t()
-            .into_owned();
-        let output = output.slice(s![.., .., 0]);
+        let output = outputs["output0"].try_extract_array::<f32>()?; // [1, 84, 8400]
+        let output = output.index_axis(Axis(0), 0); // [84, 8400]
+        let output = output.t(); // [8400, 84]
 
-        for row in output.axis_iter(Axis(0)) {
-            let row: Vec<_> = row.iter().copied().collect();
-            let (class_id, prob) = row
-                .iter()
-                .skip(4)
-                .enumerate()
-                .map(|(index, value)| (index, *value))
-                .reduce(|accum, row| if row.1 > accum.1 { row } else { accum })
-                .unwrap();
-            if prob < engine.prob_threshold {
-                continue;
-            }
+        let detections: Vec<Detection> = output
+            .axis_iter(Axis(0))
+            .filter_map(|pred| {
+                let scores = pred.slice(s![4..]);
+                let (class_id, score) = argmax(scores.iter());
 
-            let label = {
-                if class_id < engine.classes.len() {
-                    Some(engine.classes[class_id].clone())
-                } else {
-                    None
+                if score < engine.prob_threshold {
+                    return None;
                 }
-            };
-            label.inspect(|l| log::info!("Infered: {l}"));
-        }
 
-        Ok(())
+                let label = {
+                    if class_id < engine.classes.len() {
+                        Some(engine.classes[class_id].clone())
+                    } else {
+                        None
+                    }
+                };
+
+                Some(Detection {
+                    x1: pred[0],
+                    y1: pred[1],
+                    x2: pred[0],
+                    y2: pred[1],
+                    score,
+                    label,
+                })
+            })
+            .collect();
+
+        Ok(detections)
+        // log::info!("----");
+        // for d in &detections {
+        //     log::info!("label={}", d.label.as_deref().unwrap_or("nolabel"));
+        // }
+
+        // let output = output.t().into_owned();
+        // let output = output.slice(s![.., .., 0]);
+        //
+        // for row in output.axis_iter(Axis(0)) {
+        //     let row: Vec<_> = row.iter().copied().collect();
+        //     let (class_id, prob) = row
+        //         .iter()
+        //         .skip(4)
+        //         .enumerate()
+        //         .map(|(index, value)| (index, *value))
+        //         .reduce(|accum, row| if row.1 > accum.1 { row } else { accum })
+        //         .unwrap();
+        //     if prob < engine.prob_threshold {
+        //         continue;
+        //     }
+        //
+        //     let label = {
+        //         if class_id < engine.classes.len() {
+        //             Some(engine.classes[class_id].clone())
+        //         } else {
+        //             None
+        //         }
+        //     };
+        //     label.inspect(|l| log::info!("Infered: {l}"));
+        // }
     }
+}
+
+fn argmax<'a, I>(it: I) -> (usize, f32)
+where
+    I: Iterator<Item = &'a f32>,
+{
+    it.enumerate()
+        .fold((0, f32::NEG_INFINITY), |best, (i, &v)| {
+            if v > best.1 { (i, v) } else { best }
+        })
 }

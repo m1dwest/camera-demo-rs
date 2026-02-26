@@ -35,6 +35,10 @@ impl Frame {
         }
     }
 
+    pub fn from_vec(vec: Vec<u8>) -> Self {
+        Self(vec)
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         &self.0
     }

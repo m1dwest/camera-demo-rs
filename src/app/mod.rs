@@ -298,7 +298,7 @@ impl App {
 
         if let Some(frame) = frame {
             self.camera_view
-                .update_frame(ctx, frame.frame, frame.intrinsics);
+                .update_frame(ctx, frame.frame, frame.overlay, frame.intrinsics);
         };
     }
 

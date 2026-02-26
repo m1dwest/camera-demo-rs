@@ -40,3 +40,26 @@ pub fn input_array(rgb: RgbImage) -> ndarray::Array4<f32> {
 
     input
 }
+
+// TODO: move to vision
+pub fn generate_overlay(width: u32, height: u32) -> anyhow::Result<crate::core::Frame> {
+    use imageproc::drawing::draw_text_mut;
+    use std::include_bytes;
+
+    // let size = [width as usize, height as usize];
+    // let overlay = egui::ColorImage::new(size, vec![egui::Color32::TRANSPARENT]);
+    let mut overlay = image::ImageBuffer::from_pixel(width, height, image::Rgba([0, 0, 0, 0]));
+
+    let font_data: &[u8] = include_bytes!("../../assets/static/RobotoMono-Bold.ttf");
+    // let font = Font::try_from_bytes(font_data).context("Unable to load font")?;
+    let font = ab_glyph::FontRef::try_from_slice(font_data).context("Unable to load font")?;
+
+    let text_scale = ab_glyph::PxScale { x: 18.0, y: 18.0 };
+    let text_color = image::Rgba([0, 255, 0, 255]);
+
+    let text = "Test";
+    draw_text_mut(&mut overlay, text_color, 0, 0, text_scale, &font, &text);
+    //
+    let data: Vec<u8> = overlay.as_raw().to_vec();
+    Ok(crate::core::Frame::from_vec(data))
+}
