@@ -56,6 +56,8 @@ impl CameraView {
             });
 
             overlay_tex.set(overlay_image, TextureOptions::LINEAR);
+        } else {
+            self.overlay_tex = None;
         }
 
         // self.ensure_size(width, height);
