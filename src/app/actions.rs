@@ -13,6 +13,13 @@ pub enum Action {
     SelectFormat { format: crate::core::PixelFormat },
 }
 
-pub enum CameraAction {
+pub struct InferenceConfig {
+    model_path: String,
+    classes_path: String,
+}
+
+pub enum VisionAction {
     Stop,
+    EnableInference { config: InferenceConfig },
+    DisableInference,
 }

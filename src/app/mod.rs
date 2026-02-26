@@ -1,58 +1,17 @@
 pub mod actions;
 pub mod config;
+pub mod vision;
 
-use anyhow::{Result, ensure};
-
-use crossbeam_channel::{Receiver, Sender, select};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicU32, Ordering},
-};
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
-
+use anyhow::Result;
 use eframe::egui;
+use log::info;
 
-use log::{debug, error, info};
-use realsense_rust as rs;
-
-use crate::core::{Camera, DevicesModel, Frame, PixelFormat, RealSenseBackend};
+use crate::core::{Camera, DevicesModel, PixelFormat, RealSenseBackend};
 use crate::ui::{CameraView, DeviceModePanel, DevicesComboBox};
-use actions::{Action, CameraAction};
-// use config::Config;
+use actions::{Action, VisionAction};
 
 use crate::app::config::Config;
 use crate::ui::status_bar::Message;
-
-struct CameraStatus {
-    is_active: Arc<AtomicBool>,
-    width: usize,
-    height: usize,
-}
-
-impl CameraStatus {
-    fn stopped() -> Self {
-        Self {
-            is_active: Arc::new(AtomicBool::new(false)),
-            width: 0,
-            height: 0,
-        }
-    }
-
-    fn started(width: usize, height: usize) -> Self {
-        Self {
-            is_active: Arc::new(AtomicBool::new(true)),
-            width,
-            height,
-        }
-    }
-
-    fn set_active(&mut self, is_active: bool) {
-        self.is_active.store(is_active, Ordering::Relaxed);
-    }
-}
 
 struct App {
     backend: Option<RealSenseBackend>,
@@ -62,15 +21,10 @@ struct App {
     devices_combo_box: DevicesComboBox,
     device_mode_panel: DeviceModePanel,
 
-    camera_status: CameraStatus,
-    cmd_tx: Sender<actions::CameraAction>,
-    cmd_rx: Receiver<actions::CameraAction>,
-    frame_tx: Sender<Frame>,
-    frame_rx: Receiver<Frame>,
+    is_inference: bool,
+    vision_runner: Option<vision::Runner>,
 
     camera_view: CameraView,
-    // TODO: separate widget
-    // color_image: Option<egui::ColorImage>,
     fatal_error: Option<String>,
 }
 
@@ -88,9 +42,6 @@ impl App {
 
         let devices_combo_box = DevicesComboBox::new("Available devices");
 
-        let (cmd_tx, cmd_rx) = crossbeam_channel::bounded::<actions::CameraAction>(1);
-        let (frame_tx, frame_rx) = crossbeam_channel::bounded::<Frame>(1);
-
         let mut result = Self {
             backend,
             status: Message::none(),
@@ -99,11 +50,9 @@ impl App {
             devices_combo_box,
             device_mode_panel: DeviceModePanel::new(false),
 
-            camera_status: CameraStatus::stopped(),
-            cmd_tx,
-            cmd_rx,
-            frame_tx,
-            frame_rx,
+            is_inference: false,
+            vision_runner: None,
+
             camera_view: CameraView::new(),
 
             fatal_error,
@@ -141,9 +90,13 @@ impl App {
             .exact_width(300.0)
             .frame(egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::same(8)))
             .show(ctx, |ui| {
-                ui.heading("Camera control");
-                let device_mode_actions = self.device_mode_panel.show(ui, &self.devices_model);
-                actions.extend(device_mode_actions);
+                ui.vertical(|ui| {
+                    ui.heading("Camera control");
+                    let device_mode_actions = self.device_mode_panel.show(ui, &self.devices_model);
+                    actions.extend(device_mode_actions);
+
+                    ui.checkbox(&mut self.is_inference, "Enable inference");
+                });
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -169,20 +122,21 @@ impl App {
             Action::StartCamera => {
                 info!("Action::StartCamera");
                 match self.start_camera(ctx) {
-                    Ok(status) => {
+                    Ok(()) => {
                         log::info!("Camera started successfully");
                         self.device_mode_panel.set_camera_active(true);
-                        self.camera_status = status;
                     }
                     Err(e) => self.status = Message::error(e.to_string()),
                 };
             }
             Action::StopCamera => {
                 info!("Action::StopCamera");
-                self.camera_status.set_active(false);
                 self.device_mode_panel.set_camera_active(false);
-                // TODO: check return
-                self.cmd_tx.try_send(CameraAction::Stop);
+                if let Some(vision_runner) = self.vision_runner.as_ref() {
+                    vision_runner.cmd_tx.try_send(VisionAction::Stop);
+                } else {
+                    self.status = Message::warn("Camera already stopped");
+                }
             }
             Action::ChangeCamera { serial } => {
                 info!("Action::ChangeCamera {}", serial);
@@ -253,7 +207,7 @@ impl App {
         }
     }
 
-    fn start_camera(&mut self, egui_ctx: &egui::Context) -> Result<CameraStatus> {
+    fn start_camera(&mut self, egui_ctx: &egui::Context) -> Result<()> {
         let rs_ctx = self.backend.as_ref().map(|b| b.context());
         let Some(rs_ctx) = rs_ctx else {
             anyhow::bail!("Unable to start camera. No valid realsense2 context found");
@@ -282,34 +236,33 @@ impl App {
         let camera = Camera::new(serial, stream, format, mode, rs_ctx);
 
         match camera {
-            Ok(c) => {
-                start_capture_thread(
-                    c,
-                    self.cmd_rx.clone(),
-                    self.frame_tx.clone(),
-                    egui_ctx.clone(),
-                );
+            Ok(camera) => {
+                self.vision_runner = Some(vision::Runner::start(camera, egui_ctx));
             }
             Err(e) => anyhow::bail!(e),
         };
 
-        Ok(CameraStatus::started(mode.width, mode.height))
+        Ok(())
     }
 
     fn update_frame(&mut self, ctx: &egui::Context) {
-        let mut latest_frame: Option<Frame> = None;
-        while let Ok(f) = self.frame_rx.try_recv() {
-            latest_frame = Some(f);
-        }
+        let frame = self.vision_runner.as_ref().and_then(|runner| {
+            let mut latest_frame: Option<vision::Frame> = None;
+            while let Ok(f) = runner.out_rx.try_recv() {
+                match f {
+                    Ok(f) => latest_frame = Some(f),
+                    Err(e) => {
+                        self.status = Message::error(e.to_string());
+                    }
+                }
+            }
 
-        if let Some(f) = latest_frame {
-            self.camera_view.update_frame(
-                ctx,
-                &f.data,
-                self.camera_status.width,
-                self.camera_status.height,
-                PixelFormat::Rgb8,
-            );
+            latest_frame
+        });
+
+        if let Some(frame) = frame {
+            self.camera_view
+                .update_frame(ctx, frame.frame, frame.intrinsics);
         };
     }
 
@@ -325,7 +278,7 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.update_frame(ctx);
 
         let actions = self.show_ui(ctx);
@@ -356,52 +309,4 @@ pub fn run() -> eframe::Result {
             Ok(Box::new(App::new()))
         }),
     )
-}
-
-fn start_capture_thread(
-    mut camera: Camera,
-    cmd_rx: Receiver<actions::CameraAction>,
-    frame_tx: Sender<Frame>,
-    egui_ctx: egui::Context,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        loop {
-            select! {
-                recv(cmd_rx) -> msg => {
-                    match msg {
-                        Ok(CameraAction::Stop) | Err(_) => {
-                            log::info!("Stop command received");
-                            break;
-                        }
-                    }
-                }
-
-                default(Duration::from_millis(0)) => {}
-            }
-
-            let frame = match camera.wait_for_frames() {
-                Ok(f) => f,
-                Err(e) => {
-                    log::error!("Camera frame error: {}", e);
-                    continue;
-                }
-            };
-
-            if frame_tx.try_send(frame).is_err() {
-                continue;
-            }
-
-            egui_ctx.request_repaint();
-        }
-    })
-}
-
-fn drain_receiver<T>(rx: &Receiver<T>) -> usize {
-    let mut n = 0;
-
-    while rx.try_recv().is_ok() {
-        n += 1;
-    }
-
-    n
 }

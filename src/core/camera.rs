@@ -11,17 +11,18 @@ use realsense_rust::{
 };
 use std::ffi::{CString, c_void};
 
-pub struct Frame {
+pub struct Frame(Vec<u8>);
+
+pub struct Intrinsics {
+    pub width: usize,
+    pub height: usize,
+    pub format: PixelFormat,
     pub timestamp: f64,
-    pub data: Vec<u8>,
 }
 
 impl Frame {
     pub fn from_rs_frame<T>(frame: &ImageFrame<T>) -> Self {
-        Self {
-            timestamp: frame.timestamp(),
-            data: Frame::frame_as_bytes(frame).to_vec(),
-        }
+        Self(Frame::frame_as_bytes(frame).to_vec())
     }
 
     fn frame_as_bytes<T>(frame: &ImageFrame<T>) -> &[u8] {
@@ -32,11 +33,20 @@ impl Frame {
             std::slice::from_raw_parts(ptr, len)
         }
     }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
 }
 
 pub struct Camera {
     pipeline: ActivePipeline,
     mode: Mode,
+    format: PixelFormat,
 }
 
 impl Camera {
@@ -68,10 +78,14 @@ impl Camera {
 
         let pipeline = pipeline.start(Some(config))?;
 
-        Ok(Self { pipeline, mode })
+        Ok(Self {
+            pipeline,
+            mode,
+            format,
+        })
     }
 
-    pub fn wait_for_frames(&mut self) -> anyhow::Result<Frame> {
+    pub fn wait_for_frames(&mut self) -> anyhow::Result<(Frame, Intrinsics)> {
         let frames = self.pipeline.wait(Some(Camera::TIMEOUT))?;
 
         let color_frames = frames.frames_of_type::<ColorFrame>();
@@ -80,7 +94,15 @@ impl Camera {
         }
 
         let color_frame = color_frames.first().unwrap();
-        Ok(Frame::from_rs_frame(color_frame))
+        let frame = Frame::from_rs_frame(color_frame);
+        let intrinsics = Intrinsics {
+            width: self.mode.width,
+            height: self.mode.height,
+            timestamp: color_frame.timestamp(),
+            format: self.format,
+        };
+
+        Ok((frame, intrinsics))
     }
 
     pub fn width(&self) -> usize {

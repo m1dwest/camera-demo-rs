@@ -2,6 +2,7 @@ use eframe::egui;
 use eframe::egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui, Vec2};
 
 use crate::core::PixelFormat;
+use crate::core::{Frame, Intrinsics};
 
 fn scale_to_fit(to_scale: &Vec2, fit_into: &Vec2) -> Vec2 {
     let ratio = (fit_into.x / to_scale.x).min(fit_into.y / to_scale.y);
@@ -21,15 +22,9 @@ impl CameraView {
         }
     }
 
-    pub fn update_frame(
-        &mut self,
-        ctx: &egui::Context,
-        bytes: &[u8],
-        width: usize,
-        height: usize,
-        format: PixelFormat,
-    ) {
-        let color_image = egui::ColorImage::from_rgb([width, height], &bytes);
+    pub fn update_frame(&mut self, ctx: &egui::Context, frame: Frame, intrinsics: Intrinsics) {
+        let color_image =
+            egui::ColorImage::from_rgb([intrinsics.width, intrinsics.height], frame.as_slice());
         let texture = self.texture.get_or_insert_with(|| {
             ctx.load_texture("video_frame", color_image.clone(), Default::default())
         });
