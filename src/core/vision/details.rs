@@ -1,15 +1,21 @@
 use anyhow::{Context, Result};
-use image::{Rgb, RgbImage};
+use image::{ImageBuffer, Rgb, RgbImage, Rgba};
 
-use crate::app::vision;
 use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
+
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
 
 pub struct Letterbox {
     pub rgb: RgbImage,
 
     ratio: f32,
-    pad_x: u32,
-    pad_y: u32,
+    pad_x: f32,
+    pad_y: f32,
 }
 
 impl Letterbox {
@@ -23,16 +29,20 @@ impl Letterbox {
         let ratio_h = target as f32 / h as f32;
         let ratio = ratio_w.min(ratio_h);
 
-        let new_w = ((w as f32 * ratio).round() as u32).max(1);
-        let new_h = ((h as f32 * ratio).round() as u32).max(1);
+        let new_w = (w as f32 * ratio).round().max(1.0);
+        let new_h = (h as f32 * ratio).round().max(1.0);
 
-        let resized =
-            image::imageops::resize(&src, new_w, new_h, image::imageops::FilterType::Triangle);
+        let resized = image::imageops::resize(
+            &src,
+            new_w as u32,
+            new_h as u32,
+            image::imageops::FilterType::Triangle,
+        );
         let mut out = RgbImage::from_pixel(target, target, Letterbox::BG_COLOR);
-        let pad_x = (target - new_w) / 2;
-        let pad_y = (target - new_h) / 2;
+        let pad_x = (target as f32 - new_w) / 2.0;
+        let pad_y = (target as f32 - new_h) / 2.0;
 
-        image::imageops::overlay(&mut out, &resized, pad_x.into(), pad_y.into());
+        image::imageops::overlay(&mut out, &resized, pad_x as i64, pad_y as i64);
 
         let letterbox = Self {
             rgb: out,
@@ -44,9 +54,9 @@ impl Letterbox {
         Ok(letterbox)
     }
 
-    pub fn yolo_rect_to_src(&self, rect: &vision::Rect) -> vision::Rect {
-        let cx = rect.x - self.pad_x as f32;
-        let cy = rect.y - self.pad_y as f32;
+    pub fn yolo_rect_to_src(&self, rect: &Rect) -> Rect {
+        let cx = rect.x - self.pad_x;
+        let cy = rect.y - self.pad_y;
 
         let cx = (cx / self.ratio).round();
         let cy = (cy / self.ratio).round();
@@ -56,7 +66,7 @@ impl Letterbox {
         let x = cx - w / 2.0;
         let y = cy - h / 2.0;
 
-        vision::Rect { x, y, w, h }
+        Rect { x, y, w, h }
     }
 }
 
@@ -76,11 +86,10 @@ pub fn input_array(rgb: &RgbImage) -> ndarray::Array4<f32> {
     input
 }
 
-// TODO: move to vision
 pub fn generate_overlay(
     width: u32,
     height: u32,
-    detections: Vec<vision::Detection>,
+    detections: Vec<crate::core::vision::Detection>,
 ) -> anyhow::Result<crate::core::Frame> {
     use std::include_bytes;
 
@@ -88,15 +97,15 @@ pub fn generate_overlay(
     let mut overlay = ImageBuffer::from_raw(width, height, buffer.as_mut_slice())
         .expect("buffer length matches dimensions");
 
-    let font_data: &[u8] = include_bytes!("../../assets/static/RobotoMono-Bold.ttf");
+    let font_data: &[u8] = include_bytes!("../../../assets/static/RobotoMono-Bold.ttf");
     let font = ab_glyph::FontRef::try_from_slice(font_data).context("Unable to load font")?;
 
     let text_scale = ab_glyph::PxScale { x: 18.0, y: 18.0 };
     let text_color = image::Rgba([0, 255, 0, 255]);
 
     for d in &detections {
-        let rect =
-            Rect::at(d.rect.x as i32, d.rect.y as i32).of_size(d.rect.w as u32, d.rect.h as u32);
+        let rect = imageproc::rect::Rect::at(d.rect.x as i32, d.rect.y as i32)
+            .of_size(d.rect.w as u32, d.rect.h as u32);
         let text = d.label.clone().unwrap_or("no label".to_owned());
         draw_text_mut(
             &mut overlay,
@@ -113,12 +122,9 @@ pub fn generate_overlay(
     Ok(crate::core::Frame::from_vec(data))
 }
 
-use image::{ImageBuffer, Rgba};
-use imageproc::rect::Rect;
-
 pub fn draw_rect_thick(
     img: &mut ImageBuffer<Rgba<u8>, &mut [u8]>,
-    rect: Rect,
+    rect: imageproc::rect::Rect,
     color: Rgba<u8>,
     thickness: u32,
 ) {
@@ -128,7 +134,7 @@ pub fn draw_rect_thick(
         let w = rect.width() + 2 * t;
         let h = rect.height() + 2 * t;
 
-        let r = Rect::at(x, y).of_size(w, h);
+        let r = imageproc::rect::Rect::at(x, y).of_size(w, h);
         draw_hollow_rect_mut(img, r, color);
     }
 }

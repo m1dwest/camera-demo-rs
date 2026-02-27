@@ -1,3 +1,5 @@
+pub mod details;
+
 use std::{thread, time::Duration};
 use thread::JoinHandle;
 
@@ -15,15 +17,8 @@ pub struct Frame {
     pub intrinsics: core::Intrinsics,
 }
 
-pub struct Rect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
 pub struct Detection {
-    pub rect: Rect,
+    pub rect: details::Rect,
     pub score: f32,
     pub label: Option<String>,
 }
@@ -38,7 +33,7 @@ pub struct InferenceEngine {
 pub struct Runner {
     pub cmd_tx: Sender<VisionAction>,
     pub out_rx: Receiver<Result<Frame>>,
-    handle: Option<JoinHandle<()>>,
+    _handle: Option<JoinHandle<()>>,
 }
 
 pub struct Worker {
@@ -89,7 +84,7 @@ impl Runner {
         Self {
             cmd_tx,
             out_rx,
-            handle: Some(handle),
+            _handle: Some(handle),
         }
     }
 }
@@ -148,7 +143,7 @@ impl Worker {
                 let detections = self.infere(frame.clone(), &intrinsics);
                 match detections {
                     Ok(detections) => {
-                        match core::image::generate_overlay(
+                        match details::generate_overlay(
                             intrinsics.width as u32,
                             intrinsics.height as u32,
                             detections,
@@ -207,14 +202,14 @@ impl Worker {
         use ort::session::SessionOutputs;
         use ort::value::TensorRef;
 
-        let letterbox = core::image::Letterbox::from_vec(
+        let letterbox = details::Letterbox::from_vec(
             frame.into_inner(),
             intrinsics.width as u32,
             intrinsics.height as u32,
             engine.input_size,
         )?;
 
-        let input = core::image::input_array(&letterbox.rgb);
+        let input = details::input_array(&letterbox.rgb);
         let input = TensorRef::from_array_view(&input)?;
 
         let outputs: SessionOutputs = engine.model.run(inputs!["images" => input])?;
@@ -240,7 +235,7 @@ impl Worker {
                     }
                 };
 
-                let rect = Rect {
+                let rect = details::Rect {
                     x: pred[0],
                     y: pred[1],
                     w: pred[2],

@@ -1,11 +1,11 @@
 pub mod actions;
 pub mod config;
-pub mod vision;
 
 use anyhow::Result;
 use eframe::egui;
 use log::info;
 
+use crate::core::vision;
 use crate::core::{Camera, DevicesModel, PixelFormat, RealSenseBackend};
 use crate::ui::{CameraView, DeviceModePanel, DevicesComboBox};
 use actions::{Action, InferenceConfig, VisionAction};
