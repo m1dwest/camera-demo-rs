@@ -1,7 +1,8 @@
+use ab_glyph::ScaleFont;
 use anyhow::{Context, Result};
 use image::{ImageBuffer, Rgb, RgbImage, Rgba};
 
-use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
+use imageproc::drawing::{draw_filled_rect_mut, draw_hollow_rect_mut, draw_text_mut};
 
 pub struct Rect {
     pub x: f32,
@@ -91,43 +92,52 @@ pub fn generate_overlay(
     height: u32,
     detections: Vec<crate::core::vision::Detection>,
 ) -> anyhow::Result<crate::core::Frame> {
-    use std::include_bytes;
+    let buffer = vec![0u8; width as usize * height as usize * 4];
+    let mut overlay =
+        ImageBuffer::from_vec(width, height, buffer).expect("buffer length matches dimensions");
 
-    let mut buffer = vec![0u8; width as usize * height as usize * 4];
-    let mut overlay = ImageBuffer::from_raw(width, height, buffer.as_mut_slice())
-        .expect("buffer length matches dimensions");
+    let color = image::Rgba([255, 0, 0, 255]);
+    let box_thickness = 4;
+    let text_color = image::Rgba([255, 255, 255, 255]);
+    let text_painter = TextPainter::new(text_color, 18.0, 18.0)?;
 
-    let font_data: &[u8] = include_bytes!("../../../assets/static/RobotoMono-Bold.ttf");
-    let font = ab_glyph::FontRef::try_from_slice(font_data).context("Unable to load font")?;
+    // TODO: enable all detections
+    // for d in &detections {
+    if let Some(d) = detections.first() {
+        let box_x = d.rect.x as i32;
+        let box_y = d.rect.y as i32;
+        let box_w = d.rect.w as u32;
+        let box_h = d.rect.h as u32;
 
-    let text_scale = ab_glyph::PxScale { x: 18.0, y: 18.0 };
-    let text_color = image::Rgba([0, 255, 0, 255]);
+        let rect = imageproc::rect::Rect::at(box_x, box_y).of_size(box_w, box_h);
 
-    for d in &detections {
-        let rect = imageproc::rect::Rect::at(d.rect.x as i32, d.rect.y as i32)
-            .of_size(d.rect.w as u32, d.rect.h as u32);
-        let text = d.label.clone().unwrap_or("no label".to_owned());
-        draw_text_mut(
-            &mut overlay,
-            text_color,
-            (d.rect.x + 10.0) as i32,
-            (d.rect.y + 10.0) as i32,
-            text_scale,
-            &font,
-            &text,
-        );
-        draw_rect_thick(&mut overlay, rect, text_color, 5);
+        let text = d.label.as_deref().unwrap_or("Unknown");
+        let mut text_h_offset: i32 = 0;
+        if let Some(text_bounds) = text_painter.measure_text_ink_bounds(text) {
+            let text_w = text_bounds.width() as u32;
+            let text_h = text_bounds.height() as u32;
+            let text_rect = imageproc::rect::Rect::at(
+                box_x - box_thickness + 1,
+                box_y - text_h as i32 - box_thickness + 1,
+            )
+            .of_size(text_w + box_thickness as u32 * 2, text_h);
+            draw_filled_rect_mut(&mut overlay, text_rect, color);
+
+            text_h_offset = text_h as i32 + box_thickness + 1;
+        }
+        overlay = draw_rect_thick(overlay, rect, color, box_thickness as u32);
+        overlay = text_painter.draw_text(overlay, box_x, box_y - text_h_offset, text);
     }
     let data: Vec<u8> = overlay.as_raw().to_vec();
     Ok(crate::core::Frame::from_vec(data))
 }
 
 pub fn draw_rect_thick(
-    img: &mut ImageBuffer<Rgba<u8>, &mut [u8]>,
+    mut canvas: ImageBuffer<Rgba<u8>, Vec<u8>>,
     rect: imageproc::rect::Rect,
     color: Rgba<u8>,
     thickness: u32,
-) {
+) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
     for t in 0..thickness {
         let x = rect.left().saturating_sub(t as i32);
         let y = rect.top().saturating_sub(t as i32);
@@ -135,6 +145,100 @@ pub fn draw_rect_thick(
         let h = rect.height() + 2 * t;
 
         let r = imageproc::rect::Rect::at(x, y).of_size(w, h);
-        draw_hollow_rect_mut(img, r, color);
+        draw_hollow_rect_mut(&mut canvas, r, color);
+    }
+    canvas
+}
+
+struct TextPainter {
+    color: image::Rgba<u8>,
+    scale: ab_glyph::PxScale,
+    font: ab_glyph::FontRef<'static>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TextBounds {
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+}
+impl TextBounds {
+    pub fn width(&self) -> f32 {
+        (self.max_x - self.min_x).max(0.0)
+    }
+    pub fn height(&self) -> f32 {
+        (self.max_y - self.min_y).max(0.0)
+    }
+}
+
+impl TextPainter {
+    fn new(color: image::Rgba<u8>, scale_x: f32, scale_y: f32) -> anyhow::Result<Self> {
+        use std::include_bytes;
+
+        let font_data: &[u8] = include_bytes!("../../../assets/static/RobotoMono-Bold.ttf");
+        let font = ab_glyph::FontRef::try_from_slice(font_data).context("Unable to load font")?;
+
+        let scale = ab_glyph::PxScale {
+            x: scale_x,
+            y: scale_y,
+        };
+
+        Ok(Self { color, scale, font })
+    }
+
+    fn draw_text(
+        &self,
+        mut canvas: ImageBuffer<Rgba<u8>, Vec<u8>>,
+        x: i32,
+        y: i32,
+        text: &str,
+    ) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+        draw_text_mut(&mut canvas, self.color, x, y, self.scale, &self.font, &text);
+        canvas
+    }
+
+    fn measure_text_ink_bounds(&self, text: &str) -> Option<TextBounds> {
+        use ab_glyph::{Font, Point};
+
+        let scaled = self.font.as_scaled(self.scale);
+
+        let mut caret_x: f32 = 0.0;
+
+        let mut bounds: Option<TextBounds> = None;
+
+        for c in text.chars() {
+            let glyph_id = scaled.glyph_id(c);
+            if glyph_id.0 == 0 {
+                caret_x += scaled.h_advance(glyph_id);
+                continue;
+            }
+
+            let mut g = glyph_id.with_scale(self.scale);
+            g.position = Point { x: caret_x, y: 0.0 };
+
+            if let Some(r) = scaled.outline_glyph(g).map(|og| og.px_bounds()) {
+                let b = TextBounds {
+                    min_x: r.min.x,
+                    min_y: r.min.y,
+                    max_x: r.max.x,
+                    max_y: r.max.y,
+                };
+
+                bounds = Some(match bounds {
+                    None => b,
+                    Some(acc) => TextBounds {
+                        min_x: acc.min_x.min(b.min_x),
+                        min_y: acc.min_y.min(b.min_y),
+                        max_x: acc.max_x.max(b.max_x),
+                        max_y: acc.max_y.max(b.max_y),
+                    },
+                });
+            }
+
+            caret_x += scaled.h_advance(glyph_id);
+        }
+
+        bounds
     }
 }
