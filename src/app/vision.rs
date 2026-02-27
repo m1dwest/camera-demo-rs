@@ -15,12 +15,15 @@ pub struct Frame {
     pub intrinsics: core::Intrinsics,
 }
 
-#[derive(Debug, Clone)]
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
 pub struct Detection {
-    pub x1: f32,
-    pub y1: f32,
-    pub x2: f32,
-    pub y2: f32,
+    pub rect: Rect,
     pub score: f32,
     pub label: Option<String>,
 }
@@ -148,6 +151,7 @@ impl Worker {
                         match core::image::generate_overlay(
                             intrinsics.width as u32,
                             intrinsics.height as u32,
+                            detections,
                         ) {
                             Ok(overlay) => Some(overlay),
                             Err(e) => {
@@ -203,14 +207,14 @@ impl Worker {
         use ort::session::SessionOutputs;
         use ort::value::TensorRef;
 
-        let letterbox = core::image::letterbox(
+        let letterbox = core::image::Letterbox::from_vec(
             frame.into_inner(),
             intrinsics.width as u32,
             intrinsics.height as u32,
             engine.input_size,
         )?;
 
-        let input = core::image::input_array(letterbox);
+        let input = core::image::input_array(&letterbox.rgb);
         let input = TensorRef::from_array_view(&input)?;
 
         let outputs: SessionOutputs = engine.model.run(inputs!["images" => input])?;
@@ -236,48 +240,19 @@ impl Worker {
                     }
                 };
 
-                Some(Detection {
-                    x1: pred[0],
-                    y1: pred[1],
-                    x2: pred[0],
-                    y2: pred[1],
-                    score,
-                    label,
-                })
+                let rect = Rect {
+                    x: pred[0],
+                    y: pred[1],
+                    w: pred[2],
+                    h: pred[3],
+                };
+                let rect = letterbox.yolo_rect_to_src(&rect);
+
+                Some(Detection { rect, score, label })
             })
             .collect();
 
         Ok(detections)
-        // log::info!("----");
-        // for d in &detections {
-        //     log::info!("label={}", d.label.as_deref().unwrap_or("nolabel"));
-        // }
-
-        // let output = output.t().into_owned();
-        // let output = output.slice(s![.., .., 0]);
-        //
-        // for row in output.axis_iter(Axis(0)) {
-        //     let row: Vec<_> = row.iter().copied().collect();
-        //     let (class_id, prob) = row
-        //         .iter()
-        //         .skip(4)
-        //         .enumerate()
-        //         .map(|(index, value)| (index, *value))
-        //         .reduce(|accum, row| if row.1 > accum.1 { row } else { accum })
-        //         .unwrap();
-        //     if prob < engine.prob_threshold {
-        //         continue;
-        //     }
-        //
-        //     let label = {
-        //         if class_id < engine.classes.len() {
-        //             Some(engine.classes[class_id].clone())
-        //         } else {
-        //             None
-        //         }
-        //     };
-        //     label.inspect(|l| log::info!("Infered: {l}"));
-        // }
     }
 }
 

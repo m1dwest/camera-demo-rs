@@ -39,12 +39,6 @@ impl CameraView {
 
         base_tex.set(color_image, egui::TextureOptions::LINEAR);
 
-        // let pixels: Vec<Color32> = overlay
-        //     .as_slice()
-        //     .chunks_exact(4)
-        //     .map(|p| Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
-        //     .collect();
-
         if let Some(overlay) = overlay {
             let overlay_image = egui::ColorImage::from_rgba_unmultiplied(size, overlay.as_slice());
             let overlay_tex = self.overlay_tex.get_or_insert_with(|| {
