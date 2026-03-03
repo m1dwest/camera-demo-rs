@@ -4,11 +4,40 @@ use image::{ImageBuffer, Rgb, RgbImage, Rgba};
 
 use imageproc::drawing::{draw_filled_rect_mut, draw_hollow_rect_mut, draw_text_mut};
 
+#[derive(Debug, Clone, Copy)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,
     pub w: f32,
     pub h: f32,
+}
+
+impl Rect {
+    pub fn area(&self) -> f32 {
+        self.w * self.h
+    }
+
+    pub fn x2(&self) -> f32 {
+        self.x + self.w
+    }
+
+    pub fn y2(&self) -> f32 {
+        self.y + self.h
+    }
+
+    pub fn iou(&self, other: &Rect) -> f32 {
+        let ix1 = self.x.max(other.x);
+        let iy1 = self.y.max(other.y);
+        let ix2 = self.x2().min(other.x2());
+        let iy2 = self.y2().min(other.y2());
+
+        let iw = (ix2 - ix1).max(0.0);
+        let ih = (iy2 - iy1).max(0.0);
+        let inter = iw * ih;
+
+        let union = self.area() * other.area() - inter;
+        if union <= 0.0 { 0.0 } else { inter / union }
+    }
 }
 
 pub struct Letterbox {
@@ -111,22 +140,26 @@ pub fn generate_overlay(
 
         let rect = imageproc::rect::Rect::at(box_x, box_y).of_size(box_w, box_h);
 
-        let text = d.label.as_deref().unwrap_or("Unknown");
+        let label = d.label.as_deref().unwrap_or("Unknown");
+        let text = format!("{}: {:.2}", label, d.score);
         let mut text_h_offset: i32 = 0;
-        if let Some(text_bounds) = text_painter.measure_text_ink_bounds(text) {
+        if let Some(text_bounds) = text_painter.measure_text_ink_bounds(&text) {
             let text_w = text_bounds.width() as u32;
             let text_h = text_bounds.height() as u32;
             let text_rect = imageproc::rect::Rect::at(
                 box_x - box_thickness + 1,
                 box_y - text_h as i32 - box_thickness + 1,
             )
-            .of_size(text_w + box_thickness as u32 * 2, text_h);
+            .of_size(
+                text_w + box_thickness as u32 * 2,
+                text_h + box_thickness as u32,
+            );
             draw_filled_rect_mut(&mut overlay, text_rect, color);
 
             text_h_offset = text_h as i32 + box_thickness + 1;
         }
         overlay = draw_rect_thick(overlay, rect, color, box_thickness as u32);
-        overlay = text_painter.draw_text(overlay, box_x, box_y - text_h_offset, text);
+        overlay = text_painter.draw_text(overlay, box_x, box_y - text_h_offset, &text);
     }
     let data: Vec<u8> = overlay.as_raw().to_vec();
     Ok(crate::core::Frame::from_vec(data))

@@ -1,4 +1,5 @@
 pub mod details;
+mod nms;
 
 use std::{thread, time::Duration};
 use thread::JoinHandle;
@@ -20,6 +21,7 @@ pub struct Frame {
 pub struct Detection {
     pub rect: details::Rect,
     pub score: f32,
+    pub class_id: usize,
     pub label: Option<String>,
 }
 
@@ -243,11 +245,39 @@ impl Worker {
                 };
                 let rect = letterbox.yolo_rect_to_src(&rect);
 
-                Some(Detection { rect, score, label })
+                Some(Detection {
+                    rect,
+                    score,
+                    class_id,
+                    label,
+                })
             })
             .collect();
 
-        Ok(detections)
+        let params = nms::SoftNmsParams {
+            iou_thresh: 0.45,
+            sigma: 0.5,
+            score_thresh: 0.25,
+            method: nms::SoftNmsMethod::Gaussian,
+            class_aware: true,
+            max_detections: 6,
+        };
+
+        let final_dets = nms::soft_nms(detections, params);
+
+        // let mut tracks: Vec<smoothing::TrackState> = Vec::new();
+        // let mut next_id = smoothing::make_id_gen(1);
+        // let mut params = smoothing::TrackerParams::default();
+        // params.min_hits_to_confirm = 1;
+        // params.alpha_low = 0.03;
+        // params.alpha_high = 0.08;
+        // params.score_alpha_s0 = 0.20;
+        // params.score_alpha_s1 = 0.90;
+        //
+        // let stable =
+        //     smoothing::update_stable_detections(&mut tracks, &final_dets, params, &mut next_id);
+
+        Ok(final_dets)
     }
 }
 
