@@ -87,7 +87,6 @@ impl Stream {
         type ModesMap = HashMap<Mode, HashSet<Rs2Format>>;
         type KindsMap = HashMap<Rs2StreamKind, ModesMap>;
 
-        let mut modes: ModesMap = HashMap::new();
         let mut kinds: KindsMap = HashMap::new();
 
         for p in &sensor.stream_profiles() {

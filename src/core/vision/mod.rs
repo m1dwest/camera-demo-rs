@@ -1,21 +1,41 @@
 pub mod details;
 mod nms;
 
+use realsense_rust::kind::Rs2StreamKind;
 use std::{thread, time::Duration};
 use thread::JoinHandle;
 
-use anyhow::{Result, anyhow};
+use anyhow::anyhow;
 use crossbeam_channel::{Receiver, Sender, select};
 use eframe::egui;
 use ort::session::Session;
 
 use crate::app::actions::{InferenceConfig, VisionAction};
-use crate::core;
+use crate::core::{self, Camera, PixelFormat};
 
 pub struct Frame {
     pub frame: core::Frame,
     pub overlay: Option<core::Frame>,
     pub intrinsics: core::Intrinsics,
+}
+
+pub enum OutputMessage {
+    Frame(Frame),
+    CameraStopped(anyhow::Error),
+    CameraWorking(anyhow::Error),
+}
+
+impl OutputMessage {
+    pub fn is_ok(&self) -> bool {
+        matches!(self, OutputMessage::Frame(_))
+    }
+}
+
+pub struct CameraConfig {
+    pub serial: String,
+    pub stream: Rs2StreamKind,
+    pub format: PixelFormat,
+    pub mode: crate::core::Mode,
 }
 
 pub struct Detection {
@@ -34,14 +54,14 @@ pub struct InferenceEngine {
 
 pub struct Runner {
     pub cmd_tx: Sender<VisionAction>,
-    pub out_rx: Receiver<Result<Frame>>,
+    pub out_rx: Receiver<OutputMessage>,
     _handle: Option<JoinHandle<()>>,
 }
 
 pub struct Worker {
-    camera: core::Camera,
+    camera_config: CameraConfig,
     cmd_rx: Receiver<VisionAction>,
-    out_tx: Sender<Result<Frame>>,
+    out_tx: Sender<OutputMessage>,
 
     egui_ctx: egui::Context,
 
@@ -68,12 +88,12 @@ impl TryFrom<InferenceConfig> for InferenceEngine {
 }
 
 impl Runner {
-    pub fn start(camera: core::Camera, egui_ctx: &egui::Context) -> Self {
+    pub fn start(camera_config: CameraConfig, egui_ctx: &egui::Context) -> Self {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
         let (out_tx, out_rx) = crossbeam_channel::bounded(1);
 
         let mut worker = Worker {
-            camera,
+            camera_config,
             cmd_rx,
             out_tx,
             egui_ctx: egui_ctx.clone(),
@@ -93,6 +113,23 @@ impl Runner {
 
 impl Worker {
     fn run(&mut self) {
+        let camera = Camera::new(
+            &self.camera_config.serial,
+            self.camera_config.stream,
+            self.camera_config.format,
+            self.camera_config.mode,
+        );
+
+        let mut camera = match camera {
+            Ok(c) => c,
+            Err(e) => {
+                self.send_error_or_log(OutputMessage::CameraStopped(anyhow!(
+                    "Unable to create camera: {e}"
+                )));
+                return;
+            }
+        };
+
         loop {
             select! {
                 recv(self.cmd_rx) -> msg => {
@@ -106,13 +143,13 @@ impl Worker {
 
                             if self.is_inference_enabled {
                                 let e = anyhow!("Inference already enabled");
-                                self.send_error_or_log(e);
+                                self.send_error_or_log(OutputMessage::CameraWorking(e));
                             } else {
                                 match InferenceEngine::try_from(config) {
                                     Ok(engine) => self.inference_engine = Some(engine),
                                     Err(e) => {
                                         let e = anyhow!("Unable to load inference model: {e}");
-                                        self.send_error_or_log(e);
+                                        self.send_error_or_log(OutputMessage::CameraWorking(e));
                                     }
                                 };
                                 self.is_inference_enabled = true;
@@ -125,7 +162,7 @@ impl Worker {
                         },
                         Err(e) => {
                             let e = anyhow!("Unable to receive VisionAction: {}", e);
-                            self.send_error_or_log(e);
+                            self.send_error_or_log(OutputMessage::CameraWorking(e));
                         }
                     }
                 }
@@ -133,7 +170,7 @@ impl Worker {
                 default(Duration::from_millis(0)) => {}
             }
 
-            let (frame, intrinsics) = match self.camera.wait_for_frames() {
+            let (frame, intrinsics) = match camera.wait_for_frames() {
                 Ok(f) => f,
                 Err(e) => {
                     log::error!("Camera frame error: {}", e);
@@ -152,16 +189,20 @@ impl Worker {
                         ) {
                             Ok(overlay) => Some(overlay),
                             Err(e) => {
-                                self.send_error_or_log(anyhow!(
+                                let message = OutputMessage::CameraWorking(anyhow!(
                                     "Unable to generate overlay: {}",
                                     e
                                 ));
+                                self.send_error_or_log(message);
                                 None
                             }
                         }
                     }
                     Err(e) => {
-                        self.send_error_or_log(anyhow!("Unable to infere: {}", e));
+                        self.send_error_or_log(OutputMessage::CameraWorking(anyhow!(
+                            "Unable to infere: {}",
+                            e
+                        )));
                         None
                     }
                 }
@@ -175,7 +216,7 @@ impl Worker {
                 intrinsics,
             };
 
-            if self.out_tx.try_send(Ok(vision)).is_err() {
+            if self.out_tx.try_send(OutputMessage::Frame(vision)).is_err() {
                 continue;
             }
 
@@ -183,10 +224,14 @@ impl Worker {
         }
     }
 
-    fn send_error_or_log(&self, e: anyhow::Error) {
+    fn send_error_or_log(&self, message: OutputMessage) {
+        if message.is_ok() {
+            return;
+        }
+
         let _ = self
             .out_tx
-            .try_send(Err(e))
+            .try_send(message)
             .inspect_err(|e| log::error!("{e}"));
     }
 

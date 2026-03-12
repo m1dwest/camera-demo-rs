@@ -6,7 +6,8 @@ use eframe::egui;
 use log::info;
 
 use crate::core::vision;
-use crate::core::{Camera, DevicesModel, PixelFormat, RealSenseBackend};
+use crate::core::vision::OutputMessage;
+use crate::core::{DevicesModel, PixelFormat, RealSenseBackend};
 use crate::ui::{CameraView, DeviceModePanel, DevicesComboBox};
 use actions::{Action, InferenceConfig, VisionAction};
 
@@ -244,11 +245,6 @@ impl App {
     }
 
     fn start_camera(&mut self, egui_ctx: &egui::Context) -> Result<()> {
-        let rs_ctx = self.backend.as_ref().map(|b| b.context());
-        let Some(rs_ctx) = rs_ctx else {
-            anyhow::bail!("Unable to start camera. No valid realsense2 context found");
-        };
-
         let serial = self.devices_model.selected_device_serial();
         let Some(serial) = serial else {
             anyhow::bail!("Unable to start camera. Select the device first");
@@ -269,14 +265,14 @@ impl App {
             anyhow::bail!("Unable to start camera. Select the format first");
         };
 
-        let camera = Camera::new(serial, stream, format, mode, rs_ctx);
-
-        match camera {
-            Ok(camera) => {
-                self.vision_runner = Some(vision::Runner::start(camera, egui_ctx));
-            }
-            Err(e) => anyhow::bail!(e),
+        let camera_config = vision::CameraConfig {
+            serial: serial.to_owned(),
+            stream,
+            format,
+            mode,
         };
+
+        self.vision_runner = Some(vision::Runner::start(camera_config, egui_ctx));
 
         Ok(())
     }
@@ -286,9 +282,13 @@ impl App {
             let mut latest_frame: Option<vision::Frame> = None;
             while let Ok(f) = runner.out_rx.try_recv() {
                 match f {
-                    Ok(f) => latest_frame = Some(f),
-                    Err(e) => {
+                    OutputMessage::Frame(f) => latest_frame = Some(f),
+                    OutputMessage::CameraWorking(e) => {
                         self.status = Message::error(e.to_string());
+                    }
+                    OutputMessage::CameraStopped(e) => {
+                        self.status = Message::error(e.to_string());
+                        self.device_mode_panel.set_camera_active(false);
                     }
                 }
             }

@@ -29,6 +29,8 @@ pub struct DevicesModel {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum PixelFormat {
     Rgb8 = Rs2Format::Rgb8 as i32,
+    Y8 = Rs2Format::Y8 as i32,
+    Z16 = Rs2Format::Z16 as i32,
 }
 
 pub struct UnsupportedPixelFormat;
@@ -39,6 +41,8 @@ impl TryFrom<Rs2Format> for PixelFormat {
     fn try_from(format: Rs2Format) -> Result<Self, Self::Error> {
         match format {
             Rs2Format::Rgb8 => Ok(PixelFormat::Rgb8),
+            Rs2Format::Y8 => Ok(PixelFormat::Y8),
+            Rs2Format::Z16 => Ok(PixelFormat::Z16),
             _ => Err(UnsupportedPixelFormat),
         }
     }
@@ -48,6 +52,8 @@ impl From<PixelFormat> for Rs2Format {
     fn from(val: PixelFormat) -> Self {
         match val {
             PixelFormat::Rgb8 => Rs2Format::Rgb8,
+            PixelFormat::Y8 => Rs2Format::Y8,
+            PixelFormat::Z16 => Rs2Format::Z16,
         }
     }
 }
@@ -69,6 +75,8 @@ impl std::fmt::Display for PixelFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let string = match self {
             PixelFormat::Rgb8 => "RGB8",
+            PixelFormat::Y8 => "Y8",
+            PixelFormat::Z16 => "Z16",
         };
         write!(f, "{}", string)
     }
@@ -278,7 +286,10 @@ impl DevicesModel {
         self.sel_mode = Some(mode);
         self.formats = formats
             .iter()
-            .filter_map(|f| PixelFormat::try_from(*f).ok())
+            .filter_map(|f| {
+                log::info!("Format: {}", *f as i32);
+                PixelFormat::try_from(*f).ok()
+            })
             .collect();
         self.sel_format = None;
 

@@ -102,18 +102,18 @@ impl CameraView {
         }
     }
 
-    fn fill_color_image(&mut self, bytes: &[u8], format: PixelFormat) {
-        let w = self.image.size[0];
-        let h = self.image.size[1];
-        let n = w * h;
-
-        match format {
-            PixelFormat::Rgb8 => {
-                assert_eq!(bytes.len(), n * 3);
-                for (i, px) in bytes.chunks_exact(3).enumerate() {
-                    self.image.pixels[i] = Color32::from_rgb(px[0], px[1], px[2]);
-                }
-            }
-        }
-    }
+    // fn fill_color_image(&mut self, bytes: &[u8], format: PixelFormat) {
+    //     let w = self.image.size[0];
+    //     let h = self.image.size[1];
+    //     let n = w * h;
+    //
+    //     match format {
+    //         PixelFormat::Rgb8 => {
+    //             assert_eq!(bytes.len(), n * 3);
+    //             for (i, px) in bytes.chunks_exact(3).enumerate() {
+    //                 self.image.pixels[i] = Color32::from_rgb(px[0], px[1], px[2]);
+    //             }
+    //         }
+    //     }
+    // }
 }

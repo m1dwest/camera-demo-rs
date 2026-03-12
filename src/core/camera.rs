@@ -1,4 +1,8 @@
-use realsense_rust::{self as rs, frame::FrameEx};
+use realsense_rust::{
+    self as rs,
+    frame::{DepthFrame, FrameEx},
+    processing_blocks::colorizer::Colorizer,
+};
 
 use crate::core::{Mode, PixelFormat};
 
@@ -52,6 +56,7 @@ pub struct Camera {
     pipeline: ActivePipeline,
     mode: Mode,
     format: PixelFormat,
+    colorizer: Colorizer,
 }
 
 impl Camera {
@@ -62,9 +67,9 @@ impl Camera {
         stream: Rs2StreamKind,
         format: PixelFormat,
         mode: Mode,
-        context: &rs::context::Context,
     ) -> Result<Self> {
-        let pipeline = rs::pipeline::InactivePipeline::try_from(context)
+        let ctx = rs::context::Context::new().context("Failed to create RealSense context")?;
+        let pipeline = rs::pipeline::InactivePipeline::try_from(&ctx)
             .context("Unable to create RealSense pipeline")?;
         let mut config = Config::new();
 
@@ -87,6 +92,7 @@ impl Camera {
             pipeline,
             mode,
             format,
+            colorizer: Colorizer::new(1)?,
         })
     }
 
@@ -94,12 +100,25 @@ impl Camera {
         let frames = self.pipeline.wait(Some(Camera::TIMEOUT))?;
 
         let color_frames = frames.frames_of_type::<ColorFrame>();
-        if color_frames.is_empty() {
-            anyhow::bail!("Empty frames received");
-        }
+        let depth_frames = frames.frames_of_type::<DepthFrame>();
+        let color_frame = if !depth_frames.is_empty() {
+            let Some(depth_frame) = depth_frames.into_iter().next() else {
+                anyhow::bail!("Unable to receive depth frame");
+            };
 
-        let color_frame = color_frames.first().unwrap();
-        let frame = Frame::from_rs_frame(color_frame);
+            self.colorizer.queue(depth_frame);
+
+            match self.colorizer.wait(std::time::Duration::from_millis(100)) {
+                Ok(colorized_frame) => colorized_frame,
+                Err(e) => {
+                    anyhow::bail!("Error processing colorized frame: {}", e);
+                }
+            }
+        } else {
+            color_frames.into_iter().next().unwrap()
+        };
+
+        let frame = Frame::from_rs_frame(&color_frame);
         let intrinsics = Intrinsics {
             width: self.mode.width,
             height: self.mode.height,
@@ -107,6 +126,7 @@ impl Camera {
             format: self.format,
         };
 
+        // TODO: send intrinsics on streaming start
         Ok((frame, intrinsics))
     }
 
