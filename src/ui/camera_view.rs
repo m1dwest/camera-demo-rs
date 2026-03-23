@@ -1,7 +1,6 @@
 use eframe::egui;
 use eframe::egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Ui, Vec2};
 
-use crate::core::PixelFormat;
 use crate::core::{Frame, Intrinsics};
 
 fn scale_to_fit(to_scale: &Vec2, fit_into: &Vec2) -> Vec2 {
@@ -10,17 +9,17 @@ fn scale_to_fit(to_scale: &Vec2, fit_into: &Vec2) -> Vec2 {
 }
 
 pub struct CameraView {
+    base_image: ColorImage,
     base_tex: Option<TextureHandle>,
     overlay_tex: Option<TextureHandle>,
-    image: ColorImage,
 }
 
 impl CameraView {
     pub fn new() -> Self {
         Self {
+            base_image: ColorImage::new([1, 1], vec![Color32::BLACK]),
             base_tex: None,
             overlay_tex: None,
-            image: ColorImage::new([1, 1], vec![Color32::BLACK]),
         }
     }
 
@@ -32,12 +31,12 @@ impl CameraView {
         intrinsics: Intrinsics,
     ) {
         let size = [intrinsics.width, intrinsics.height];
-        let color_image = egui::ColorImage::from_rgb(size, frame.as_slice());
+        self.base_image = egui::ColorImage::from_rgb(size, frame.as_slice());
         let base_tex = self.base_tex.get_or_insert_with(|| {
-            ctx.load_texture("video_frame", color_image.clone(), Default::default())
+            ctx.load_texture("video_frame", self.base_image.clone(), Default::default())
         });
 
-        base_tex.set(color_image, egui::TextureOptions::LINEAR);
+        base_tex.set(self.base_image.clone(), egui::TextureOptions::LINEAR);
 
         if let Some(overlay) = overlay {
             let overlay_image = egui::ColorImage::from_rgba_unmultiplied(size, overlay.as_slice());
@@ -95,12 +94,30 @@ impl CameraView {
         }
     }
 
-    fn ensure_size(&mut self, width: usize, height: usize) {
-        let target = [width, height];
-        if self.image.size != target {
-            self.image = ColorImage::new(target, vec![Color32::BLACK; width * height]);
+    pub fn get_rgb_image(&self) -> anyhow::Result<image::RgbImage> {
+        let mut bytes = Vec::with_capacity(self.base_image.pixels.len() * 3);
+
+        for p in &self.base_image.pixels {
+            bytes.push(p.r());
+            bytes.push(p.g());
+            bytes.push(p.b());
+            // bytes.push(p.a());
         }
+
+        image::RgbImage::from_raw(
+            self.base_image.size[0] as u32,
+            self.base_image.size[1] as u32,
+            bytes,
+        )
+        .ok_or_else(|| anyhow::anyhow!("Failed to create image buffer from frame"))
     }
+
+    // fn ensure_size(&mut self, width: usize, height: usize) {
+    //     let target = [width, height];
+    //     if self.image.size != target {
+    //         self.image = ColorImage::new(target, vec![Color32::BLACK; width * height]);
+    //     }
+    // }
 
     // fn fill_color_image(&mut self, bytes: &[u8], format: PixelFormat) {
     //     let w = self.image.size[0];

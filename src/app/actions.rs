@@ -11,6 +11,7 @@ pub enum Action {
     SelectStream { stream: Rs2StreamKind },
     SelectMode { mode: crate::core::Mode },
     SelectFormat { format: crate::core::PixelFormat },
+    SaveSnapshot,
 }
 
 pub struct InferenceConfig {

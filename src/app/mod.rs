@@ -1,6 +1,8 @@
 pub mod actions;
 pub mod config;
 
+use std::time::UNIX_EPOCH;
+
 use anyhow::Result;
 use eframe::egui;
 use log::info;
@@ -13,6 +15,14 @@ use actions::{Action, InferenceConfig, VisionAction};
 
 use crate::app::config::Config;
 use crate::ui::status_bar::Message;
+
+fn unique_name(prefix: &str) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards");
+
+    format!("{prefix}_{}", now.as_millis())
+}
 
 struct App {
     backend: Option<RealSenseBackend>,
@@ -112,8 +122,23 @@ impl App {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let size = ui.max_rect().size();
-            self.camera_view.show(ui, Some(size));
+            ui.vertical(|ui| {
+                const BUTTON_SIZE: f32 = 32.0;
+
+                let size = ui.max_rect().size();
+                let size =
+                    egui::Vec2::new(size.x, size.y - BUTTON_SIZE - ui.spacing().item_spacing.y);
+                self.camera_view.show(ui, Some(size));
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+                    if ui
+                        .add_sized([BUTTON_SIZE, BUTTON_SIZE], egui::Button::new("📷"))
+                        .clicked()
+                    {
+                        actions.push(Action::SaveSnapshot);
+                    }
+                });
+            });
         });
 
         actions
@@ -127,8 +152,8 @@ impl App {
         match is_enabled {
             true => {
                 let config = InferenceConfig {
-                    model_path: "yolov12n.onnx".to_owned(),
-                    classes_path: "coco.names".to_owned(),
+                    model_path: "zframes3.onnx".to_owned(),
+                    classes_path: "zframes3.names".to_owned(),
                     input_size: 640,
                     prob_threshold: 0.4,
                 };
@@ -195,6 +220,10 @@ impl App {
                 info!("Action::SelectFormat {}", format);
                 self.select_format(format);
             }
+            Action::SaveSnapshot => {
+                info!("Action::SaveSnapshot");
+                self.save_snapshot("images");
+            }
             Action::None => {}
         });
     }
@@ -240,6 +269,26 @@ impl App {
     fn select_format(&mut self, format: PixelFormat) {
         let ok = self.devices_model.select_format(format);
         if let Err(e) = ok {
+            self.status = Message::error(e.to_string());
+        }
+    }
+
+    fn save_snapshot(&mut self, dir: &str) {
+        let rgba = match self.camera_view.get_rgb_image() {
+            Ok(rgba) => rgba,
+            Err(e) => {
+                self.status = Message::error(e.to_string());
+                return;
+            }
+        };
+
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            self.status = Message::error(e.to_string());
+        }
+
+        let image_basename = format!("{}/{}.jpg", dir, unique_name("image"));
+
+        if let Err(e) = rgba.save_with_format(image_basename, image::ImageFormat::Jpeg) {
             self.status = Message::error(e.to_string());
         }
     }
